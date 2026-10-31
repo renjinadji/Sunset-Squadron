@@ -542,7 +542,6 @@ export class Jet {
       canopy.position.set(0, 0.85, -1.4);
       airframeParts.push(canopy);
     }
-    airframeParts.push(canopy);
 
     this.burner = new THREE.Mesh(geo('burner', () => {
       const g = new THREE.ConeGeometry(0.8, 3.0, 6);
