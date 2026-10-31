@@ -58,3 +58,36 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
   assert.strictEqual(typeof mod.isDefaultItem, 'function');
   fs.unlinkSync(tmp);
 });
+
+test('procedural cosmetics catalog covers all Phase 3 cosmetic styles across 6 categories', () => {
+  const expectedKits = {
+    wing: ['wing_default', 'wing_xwing', 'wing_triplane', 'wing_twinboom', 'wing_saucer'],
+    finish: ['finish_default', 'finish_chrome', 'finish_synth', 'finish_holo', 'finish_gold'],
+    trail: ['trail_default', 'trail_voxel', 'trail_rings', 'trail_rainbow', 'trail_lightning'],
+    firework: ['fw_default', 'fw_saturn', 'fw_spiral', 'fw_hearts'],
+    voice: ['voice_default', 'voice_chiptune', 'voice_dreadnought', 'voice_sonar'],
+    visor: ['visor_default', 'visor_shades', 'visor_led', 'visor_laurel'],
+  };
+
+  for (const [cat, itemIds] of Object.entries(expectedKits)) {
+    for (const id of itemIds) {
+      const item = shop.itemById(id);
+      assert.ok(item, `Item ${id} must exist in shop catalog`);
+      assert.strictEqual(item.category, cat);
+      assert.strictEqual(typeof item.params, 'object', `${id} must specify procedural params`);
+    }
+  }
+
+  // Check specific required procedural params
+  const chrome = shop.itemById('finish_chrome');
+  assert.strictEqual(chrome.params.metalness, 0.95);
+  assert.strictEqual(chrome.params.roughness, 0.08);
+
+  const gold = shop.itemById('finish_gold');
+  assert.strictEqual(gold.params.metalness, 0.9);
+  assert.strictEqual(gold.params.roughness, 0.2);
+
+  const holo = shop.itemById('finish_holo');
+  assert.strictEqual(holo.params.transparent, true);
+  assert.strictEqual(holo.params.opacity, 0.72);
+});

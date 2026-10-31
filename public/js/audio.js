@@ -699,14 +699,85 @@ export class SoundEngine {
   }
 
   /**
-   * Pilot chatter: procedural gibberish "voice" for emotes, Animal-Crossing style.
-   * 3-6 short notes; the pitch base shifts per pilot so every pilot sounds distinct.
+   * Pilot chatter: procedural voice synthesis for emotes.
+   * Supports equipped voice style:
+   * - voice_default: Animal-Crossing style 3-6 note comms chirp.
+   * - voice_chiptune: Fast 4-note square-wave arcade arpeggio.
+   * - voice_dreadnought: Deep detuned dual-sawtooth brass horn blast with low-pass swell.
+   * - voice_sonar: High-frequency resonant sine ping with rapid FM pitch sweep.
    */
-  pilotChatter(pilotIndex = 0, volume = 1) {
+  pilotChatter(pilotIndex = 0, volume = 1, voiceStyle = 'voice_default') {
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const base = 240 + ((pilotIndex * 47) % 220);   // 240-459 Hz, unique-ish per pilot
-    const scale = [1, 1.125, 1.25, 1.335, 1.5, 1.685, 1.875];   // major-ish steps
+
+    if (voiceStyle === 'voice_chiptune') {
+      // 8-Bit Arcade Arpeggio
+      const base = 260 + ((pilotIndex * 53) % 240);
+      const arp = [1.0, 1.2599, 1.4983, 2.0];
+      for (let i = 0; i < 4; i++) {
+        const st = t + i * 0.038;
+        const o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(base * arp[i], st);
+        const g = ctx.createGain();
+        this._env(g, st, 0.12 * volume, 0.003, 0.035);
+        o.connect(g).connect(this.master);
+        o.start(st);
+        o.stop(st + 0.045);
+      }
+      return;
+    }
+
+    if (voiceStyle === 'voice_dreadnought') {
+      // Deep detuned dual-sawtooth brass horn blast (65-95 Hz) with low-pass filter envelope
+      const baseFreq = 68 + ((pilotIndex * 7) % 24);
+      const duration = 0.85;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(280, t);
+      lp.frequency.exponentialRampToValueAtTime(880, t + 0.15);
+      lp.frequency.exponentialRampToValueAtTime(190, t + duration);
+      lp.Q.value = 3.2;
+
+      for (const detune of [-6, 6]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(baseFreq, t);
+        o.detune.setValueAtTime(detune, t);
+        const g = ctx.createGain();
+        this._env(g, t, 0.22 * volume, 0.06, duration - 0.06);
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + duration + 0.05);
+      }
+      lp.connect(this.master);
+      return;
+    }
+
+    if (voiceStyle === 'voice_sonar') {
+      // High-frequency resonant sine ping with rapid FM pitch sweep
+      const startFreq = 2100 + ((pilotIndex * 120) % 600);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(startFreq, t);
+      o.frequency.exponentialRampToValueAtTime(startFreq * 0.42, t + 0.18);
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(startFreq * 0.7, t);
+      bp.Q.value = 6.0;
+
+      const g = ctx.createGain();
+      this._env(g, t, 0.2 * volume, 0.005, 0.65);
+      o.connect(bp).connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.7);
+      return;
+    }
+
+    // Default: Animal-Crossing style procedural chirp
+    const base = 240 + ((pilotIndex * 47) % 220); // 240-459 Hz, unique-ish per pilot
+    const scale = [1, 1.125, 1.25, 1.335, 1.5, 1.685, 1.875]; // major-ish steps
     const n = 3 + Math.floor(Math.random() * 4);
     for (let i = 0; i < n; i++) {
       const st = t + i * 0.075;
@@ -723,5 +794,76 @@ export class SoundEngine {
       o.start(st);
       o.stop(st + 0.09);
     }
+  }
+
+  /** Shop purchase success sound: coin clink + ascending major chime. */
+  playShopBuy(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const ping = ctx.createOscillator();
+    ping.type = 'sine';
+    ping.frequency.setValueAtTime(1400, t);
+    ping.frequency.exponentialRampToValueAtTime(1900, t + 0.04);
+    const pg = ctx.createGain();
+    this._env(pg, t, 0.25 * volume, 0.002, 0.22);
+    ping.connect(pg).connect(this.master);
+    ping.start(t);
+    ping.stop(t + 0.25);
+
+    [659.25, 830.61, 987.77, 1318.51].forEach((f, i) => {
+      const st = t + 0.04 + i * 0.06;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      this._env(g, st, 0.14 * volume, 0.005, 0.35);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.4);
+    });
+  }
+
+  /** Shop equip confirmation: dual mechanical ratchet click + power-on affirmation. */
+  playShopEquip(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (const delay of [0, 0.035]) {
+      const st = t + delay;
+      const click = ctx.createOscillator();
+      click.type = 'triangle';
+      click.frequency.setValueAtTime(800, st);
+      click.frequency.exponentialRampToValueAtTime(200, st + 0.015);
+      const cg = ctx.createGain();
+      this._env(cg, st, 0.22 * volume, 0.002, 0.02);
+      click.connect(cg).connect(this.master);
+      click.start(st);
+      click.stop(st + 0.03);
+    }
+    [349.23, 523.25].forEach((f, i) => {
+      const st = t + 0.05 + i * 0.05;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      this._env(g, st, 0.16 * volume, 0.01, 0.28);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.35);
+    });
+  }
+
+  /** Credit roll-up counter tick for post-match scoreboard. */
+  playCreditTick(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(1600, t);
+    o.frequency.exponentialRampToValueAtTime(1100, t + 0.018);
+    const g = ctx.createGain();
+    this._env(g, t, 0.08 * volume, 0.001, 0.018);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.025);
   }
 }

@@ -87,7 +87,7 @@ function drawEmblem(ctx, kind, cx, cy, s, color) {
  * Draw a pilot portrait into a canvas (creates one if not given). Returns the canvas.
  * The composition is square: glowing backdrop, shoulders, helmet with visor and emblem.
  */
-export function drawPortrait(pilot, size = 128, canvas = null) {
+export function drawPortrait(pilot, size = 128, canvas = null, equipped = null) {
   const c = canvas || document.createElement('canvas');
   c.width = size; c.height = size;
   const ctx = c.getContext('2d');
@@ -218,6 +218,155 @@ export function drawPortrait(pilot, size = 128, canvas = null) {
   ctx.beginPath(); ctx.ellipse(size * 0.42, size * 0.42, size * 0.025, eyeH, 0, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(size * 0.58, size * 0.42, size * 0.025, eyeH, 0, 0, Math.PI * 2); ctx.fill();
 
+  // Procedural Visor Flair Overlay
+  const visorStyle = (equipped && typeof equipped === 'object' ? equipped.visor : equipped) || 'visor_default';
+  if (visorStyle === 'visor_shades') {
+    // Aviator Mirror Shades: top brow bar, center bridge, dual teardrop lenses with sunset mirror gradient
+    ctx.save();
+    ctx.strokeStyle = '#ffd54a';
+    ctx.lineWidth = 2.4 * u;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(size * 0.31, size * 0.36);
+    ctx.lineTo(size * 0.69, size * 0.36);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(size * 0.5, size * 0.39, size * 0.03, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+
+    const lensCenters = [size * 0.40, size * 0.60];
+    for (const cx of lensCenters) {
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.08, size * 0.36);
+      ctx.lineTo(cx + size * 0.08, size * 0.36);
+      ctx.quadraticCurveTo(cx + size * 0.09, size * 0.44, cx + size * 0.04, size * 0.49);
+      ctx.quadraticCurveTo(cx, size * 0.51, cx - size * 0.04, size * 0.49);
+      ctx.quadraticCurveTo(cx - size * 0.09, size * 0.44, cx - size * 0.08, size * 0.36);
+      ctx.closePath();
+
+      const grad = ctx.createLinearGradient(cx - size * 0.08, size * 0.36, cx + size * 0.08, size * 0.51);
+      grad.addColorStop(0, '#2b1e4a');
+      grad.addColorStop(0.35, '#ff5e5b');
+      grad.addColorStop(0.65, '#ffa63c');
+      grad.addColorStop(1, '#ffe84a');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = '#ffd54a';
+      ctx.lineWidth = 1.8 * u;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.05, size * 0.36);
+      ctx.lineTo(cx - size * 0.01, size * 0.36);
+      ctx.lineTo(cx - size * 0.06, size * 0.51);
+      ctx.lineTo(cx - size * 0.09, size * 0.51);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  } else if (visorStyle === 'visor_led') {
+    // Cyberpunk LED Matrix: dark matrix grid + glowing neon cyber expression (^ _ ~)
+    ctx.save();
+    ctx.fillStyle = 'rgba(10, 16, 26, 0.88)';
+    roundRect(ctx, size * 0.28, size * 0.34, size * 0.44, size * 0.15, size * 0.06);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(79, 240, 176, 0.15)';
+    for (let gx = size * 0.31; gx < size * 0.69; gx += 4 * u) {
+      for (let gy = size * 0.36; gy < size * 0.48; gy += 4 * u) {
+        ctx.fillRect(gx, gy, 1.5 * u, 1.5 * u);
+      }
+    }
+
+    ctx.shadowColor = '#4ff0b0';
+    ctx.shadowBlur = 8 * u;
+    ctx.fillStyle = '#4ff0b0';
+
+    const px = 2.4 * u;
+    const drawPixel = (x, y) => ctx.fillRect(x, y, px, px);
+
+    // Left eye caret '^'
+    const lx = size * 0.38, ly = size * 0.41;
+    drawPixel(lx, ly - 5 * u);
+    drawPixel(lx - 3 * u, ly - 2 * u);
+    drawPixel(lx - 6 * u, ly + 1 * u);
+    drawPixel(lx + 3 * u, ly - 2 * u);
+    drawPixel(lx + 6 * u, ly + 1 * u);
+
+    // Right eye winking '~'
+    const rx = size * 0.62, ry = size * 0.41;
+    drawPixel(rx - 6 * u, ry);
+    drawPixel(rx - 3 * u, ry - 3 * u);
+    drawPixel(rx, ry);
+    drawPixel(rx + 3 * u, ry + 2 * u);
+    drawPixel(rx + 6 * u, ry);
+
+    // Neon pink blush dots
+    ctx.shadowColor = '#ff6bd6';
+    ctx.fillStyle = '#ff6bd6';
+    ctx.fillRect(size * 0.33, size * 0.45, 4 * u, 2 * u);
+    ctx.fillRect(size * 0.65, size * 0.45, 4 * u, 2 * u);
+    ctx.restore();
+  } else if (visorStyle === 'visor_laurel') {
+    // Golden Ace Laurels: olive branch stems curving around cheeks with golden leaves and ace star clasp
+    ctx.save();
+    ctx.shadowColor = '#ffd54a';
+    ctx.shadowBlur = 6 * u;
+    ctx.fillStyle = '#ffcc22';
+    ctx.strokeStyle = '#e6b800';
+    ctx.lineWidth = 2 * u;
+
+    const drawBranch = (dir) => {
+      const startX = size * 0.5 + dir * size * 0.04;
+      const startY = size * 0.62;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.bezierCurveTo(
+        size * 0.5 + dir * size * 0.22, size * 0.62,
+        size * 0.5 + dir * size * 0.32, size * 0.48,
+        size * 0.5 + dir * size * 0.31, size * 0.34
+      );
+      ctx.stroke();
+
+      const leafSteps = 6;
+      for (let i = 0; i < leafSteps; i++) {
+        const t = (i + 1) / (leafSteps + 1);
+        const bx = Math.pow(1 - t, 2) * startX + 2 * (1 - t) * t * (size * 0.5 + dir * size * 0.24) + t * t * (size * 0.5 + dir * size * 0.31);
+        const by = Math.pow(1 - t, 2) * startY + 2 * (1 - t) * t * (size * 0.58) + t * t * (size * 0.34);
+        const ang = -dir * (0.4 + t * 0.9);
+        for (const side of [-1, 1]) {
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(ang + side * 0.5);
+          ctx.beginPath();
+          ctx.ellipse(0, -size * 0.035, size * 0.015, size * 0.032, 0, 0, Math.PI * 2);
+          const leafGrad = ctx.createLinearGradient(0, -size * 0.07, 0, 0);
+          leafGrad.addColorStop(0, '#fff6c0');
+          leafGrad.addColorStop(0.5, '#ffd54a');
+          leafGrad.addColorStop(1, '#b8860b');
+          ctx.fillStyle = leafGrad;
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    };
+
+    drawBranch(-1);
+    drawBranch(1);
+
+    ctx.fillStyle = '#ffffff';
+    star(ctx, size * 0.5, size * 0.62, size * 0.035, size * 0.015, 5);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // Emblem on the left temple
   drawEmblem(ctx, P.emblem, size * 0.73, size * 0.3, size * 0.055, hexCss(accent));
   // Outline
@@ -229,16 +378,17 @@ export function drawPortrait(pilot, size = 128, canvas = null) {
 }
 
 /** Cached portrait canvas for UI use (never mutate the returned canvas). */
-export function portraitCanvas(pilot, size = 128) {
-  const key = `${pilot.id}@${size}`;
-  if (!cache.has(key)) cache.set(key, drawPortrait(pilot, size));
+export function portraitCanvas(pilot, size = 128, equipped = null) {
+  const visorStyle = (equipped && typeof equipped === 'object' ? equipped.visor : equipped) || 'visor_default';
+  const key = `${pilot.id}@${size}:${visorStyle}`;
+  if (!cache.has(key)) cache.set(key, drawPortrait(pilot, size, null, equipped));
   return cache.get(key);
 }
 
 /** Fresh <canvas> element sized for the DOM (uses devicePixelRatio for crispness). */
-export function portraitElement(pilot, cssSize = 96) {
+export function portraitElement(pilot, cssSize = 96, equipped = null) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const c = drawPortrait(pilot, Math.round(cssSize * dpr));
+  const c = drawPortrait(pilot, Math.round(cssSize * dpr), null, equipped);
   c.style.width = `${cssSize}px`;
   c.style.height = `${cssSize}px`;
   c.className = 'portrait';

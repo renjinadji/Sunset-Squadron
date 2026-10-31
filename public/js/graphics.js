@@ -238,6 +238,130 @@ export class ParticleSystem {
     }
   }
 
+  /**
+   * Procedural firework warhead detonation FX:
+   * - fw_default: standard spherical burst.
+   * - fw_saturn: core burst + 2 perpendicular planetary rings.
+   * - fw_spiral: 3-arm outward corkscrew helical trajectory.
+   * - fw_hearts: 3D parametric heart curve expansion.
+   */
+  fireworkBurst(center, count, speed, style = 'fw_default', opts = {}) {
+    if (!style || style === 'fw_default') {
+      return this.burst(center, count, speed, opts);
+    }
+
+    if (style === 'fw_saturn') {
+      // 1. Central core burst
+      const coreCount = Math.floor(count * 0.4);
+      this.burst(center, coreCount, speed * 0.55, { ...opts, size: (opts.size || 2.2) * 0.8 });
+
+      // 2. Horizontal equatorial ring (30%)
+      const ring1Count = Math.floor(count * 0.3);
+      for (let k = 0; k < ring1Count; k++) {
+        const ang = (k / ring1Count) * Math.PI * 2;
+        const s = speed * (0.85 + Math.random() * 0.3);
+        const vx = Math.cos(ang) * s;
+        const vy = (Math.random() - 0.5) * s * 0.12;
+        const vz = Math.sin(ang) * s;
+        this.spawn({
+          pos: center,
+          vel: { x: vx, y: vy, z: vz },
+          life: (opts.life || 1.1) * (0.9 + Math.random() * 0.4),
+          size: (opts.size || 2.2) * (0.7 + Math.random() * 0.5),
+          drag: 1.4,
+          gravity: (opts.gravity || 0) * 0.3,
+          colors: opts.colors,
+          glow: (opts.glow || 1.7) * 1.3,
+        });
+      }
+
+      // 3. Perpendicular tilted ring (30%, tilted 65 degrees)
+      const ring2Count = count - coreCount - ring1Count;
+      const tilt = 1.15;
+      const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+      for (let k = 0; k < ring2Count; k++) {
+        const ang = (k / ring2Count) * Math.PI * 2;
+        const s = speed * (0.9 + Math.random() * 0.3);
+        const rx = Math.cos(ang) * s;
+        const rz = Math.sin(ang) * s;
+        const ry = (Math.random() - 0.5) * s * 0.12;
+        const vx = rx;
+        const vy = ry * cosT - rz * sinT;
+        const vz = ry * sinT + rz * cosT;
+        this.spawn({
+          pos: center,
+          vel: { x: vx, y: vy, z: vz },
+          life: (opts.life || 1.1) * (0.9 + Math.random() * 0.4),
+          size: (opts.size || 2.2) * (0.7 + Math.random() * 0.5),
+          drag: 1.4,
+          gravity: (opts.gravity || 0) * 0.3,
+          colors: opts.colors,
+          glow: (opts.glow || 1.7) * 1.3,
+        });
+      }
+      return;
+    }
+
+    if (style === 'fw_spiral') {
+      // Screaming Spiral: 3-arm outward logarithmic corkscrew
+      const arms = 3;
+      for (let k = 0; k < count; k++) {
+        const arm = k % arms;
+        const frac = k / count;
+        const baseAng = (arm * Math.PI * 2) / arms;
+        const spiralAng = baseAng + frac * Math.PI * 5;
+        const radSpeed = speed * (0.55 + frac * 0.9);
+        const tangentialSpeed = speed * 0.42;
+        const vx = Math.cos(spiralAng) * radSpeed - Math.sin(spiralAng) * tangentialSpeed;
+        const vz = Math.sin(spiralAng) * radSpeed + Math.cos(spiralAng) * tangentialSpeed;
+        const vy = (Math.random() - 0.5) * speed * 0.6 + Math.sin(spiralAng * 2) * speed * 0.3;
+        this.spawn({
+          pos: center,
+          vel: { x: vx, y: vy, z: vz },
+          life: (opts.life || 1.2) * (0.8 + Math.random() * 0.5),
+          size: (opts.size || 2.0) * (0.6 + Math.random() * 0.6),
+          drag: 1.3,
+          gravity: opts.gravity || 0,
+          colors: opts.colors,
+          glow: (opts.glow || 1.7) * 1.4,
+        });
+      }
+      return;
+    }
+
+    if (style === 'fw_hearts') {
+      // 3D Parametric Heart Curve
+      const scaleFactor = speed * 0.075;
+      for (let k = 0; k < count; k++) {
+        const t = (k / count) * Math.PI * 2 - Math.PI;
+        const sinT = Math.sin(t);
+        const cosT = Math.cos(t);
+        const hx = 16 * Math.pow(sinT, 3);
+        const hy = 13 * cosT - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+        const hz = (Math.random() - 0.5) * 6;
+
+        const jitter = 0.85 + Math.random() * 0.3;
+        const vx = hx * scaleFactor * jitter;
+        const vy = hy * scaleFactor * jitter;
+        const vz = hz * scaleFactor * jitter;
+
+        this.spawn({
+          pos: center,
+          vel: { x: vx, y: vy, z: vz },
+          life: (opts.life || 1.3) * (0.9 + Math.random() * 0.4),
+          size: (opts.size || 2.2) * (0.7 + Math.random() * 0.6),
+          drag: 1.2,
+          gravity: (opts.gravity || 0) * 0.2,
+          colors: opts.colors || [new THREE.Color(0xffffff), new THREE.Color(0xff6bd6), new THREE.Color(0x9b1d5a)],
+          glow: (opts.glow || 1.8) * 1.3,
+        });
+      }
+      return;
+    }
+
+    this.burst(center, count, speed, opts);
+  }
+
   update(dt, camPos) {
     const posArr = this.pos, vel = this.vel;
     const cx = camPos ? camPos.x : 0, cy = camPos ? camPos.y : 0, cz = camPos ? camPos.z : 0;

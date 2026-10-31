@@ -2,6 +2,7 @@
 // firework rockets and the golden ribbon contrail. Zero asset files.
 import * as THREE from 'three';
 import { POWERUPS } from './pilots-data.js';
+import { DEFAULT_EQUIPPED } from './shop-data.js';
 
 export const PAINT_COLORS = [
   { name: 'Coral', hex: 0xff5e5b },
@@ -38,111 +39,34 @@ export class Jet {
    * @param {object} pilot  pilot definition from pilots-data.js (colors.body/wing/trail/accent)
    * @param {string} name   player name shown on the floating tag
    * @param {HTMLCanvasElement|null} portrait  optional portrait drawn next to the name
+   * @param {object|null} equipped  optional equipped cosmetic item IDs
    */
-  constructor(pilot, name, portrait = null) {
+  constructor(pilot, name, portrait = null, equipped = null) {
     this.group = new THREE.Group();
     this.name = name;
     this.pilot = pilot;
     this.portrait = portrait;
-    const paint = pilot.colors.body;
-    const wingPaint = pilot.colors.wing;
+    this.equipped = Object.assign({}, DEFAULT_EQUIPPED, equipped || {});
     const trail = pilot.colors.trail;
     this.trailCss = '#' + trail.toString(16).padStart(6, '0');
-    this.bodyMat = new THREE.MeshStandardMaterial({ color: paint, flatShading: true, roughness: 0.55, metalness: 0.15 });
-    this.wingMat = new THREE.MeshStandardMaterial({ color: wingPaint, flatShading: true, roughness: 0.55, metalness: 0.15 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2438, flatShading: true, roughness: 0.6, metalness: 0.2 });
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x7fe9ff, emissive: 0x2a9ab8, emissiveIntensity: 0.35, flatShading: true, roughness: 0.2, metalness: 0.4 });
-    this.burnerMat = new THREE.MeshStandardMaterial({ color: 0xffb060, emissive: 0xff9a2a, emissiveIntensity: 2.8, roughness: 0.4, flatShading: true });
 
-    // Fuselage (nose points toward -Z)
-    const fuselage = new THREE.Mesh(geo('fuselage', () => {
-      const g = new THREE.CylinderGeometry(0.55, 1.35, 7.5, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), this.bodyMat);
-    fuselage.position.z = -0.4;
-    const nose = new THREE.Mesh(geo('nose', () => {
-      const g = new THREE.ConeGeometry(0.55, 2.4, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), darkMat);
-    nose.position.z = -5.3;
-    const tailCone = new THREE.Mesh(geo('tailcone', () => {
-      const g = new THREE.CylinderGeometry(1.35, 0.95, 1.6, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), darkMat);
-    tailCone.position.z = 4.1;
-
-    // Swept wings
-    const wing = new THREE.Mesh(geo('wing', () => {
-      const shape = new THREE.Shape();
-      shape.moveTo(0, -1.2);
-      shape.lineTo(6.2, 2.4);
-      shape.lineTo(6.2, 3.4);
-      shape.lineTo(0, 2.0);
-      shape.lineTo(-6.2, 3.4);
-      shape.lineTo(-6.2, 2.4);
-      shape.closePath();
-      const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
-      g.rotateX(Math.PI / 2);
-      g.translate(0, -0.2, 0);
-      return g;
-    }), this.wingMat);
-    // Tail fins
-    const vfin = new THREE.Mesh(geo('vfin', () => {
-      const shape = new THREE.Shape();
-      shape.moveTo(0, 0);
-      shape.lineTo(2.6, 0);
-      shape.lineTo(2.2, 2.6);
-      shape.lineTo(1.2, 2.6);
-      shape.closePath();
-      const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
-      g.rotateY(-Math.PI / 2);
-      g.translate(0.15, 0.6, 1.4);
-      return g;
-    }), this.bodyMat);
-    const hfin = new THREE.Mesh(geo('hfin', () => {
-      const shape = new THREE.Shape();
-      shape.moveTo(0, 0);
-      shape.lineTo(2.6, 1.3);
-      shape.lineTo(2.6, 2.0);
-      shape.lineTo(0, 1.4);
-      shape.lineTo(-2.6, 2.0);
-      shape.lineTo(-2.6, 1.3);
-      shape.closePath();
-      const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
-      g.rotateX(Math.PI / 2);
-      g.translate(0, 0.3, 2.2);
-      return g;
-    }), darkMat);
-    // Canopy
-    const canopy = new THREE.Mesh(geo('canopy', () => {
-      const g = new THREE.SphereGeometry(0.9, 8, 6);
-      g.scale(0.8, 0.8, 1.8);
-      return g;
-    }), canopyMat);
-    canopy.position.set(0, 0.85, -1.4);
-    // Afterburner core (bloomed)
-    this.burner = new THREE.Mesh(geo('burner', () => {
-      const g = new THREE.ConeGeometry(0.8, 3.0, 6);
-      g.rotateX(Math.PI / 2);
-      return g;
-    }), this.burnerMat);
-    this.burner.position.z = 5.6;
-    // Wing-tip lights glow in the pilot's trail colour
-    const tipMat = new THREE.MeshStandardMaterial({ color: trail, emissive: trail, emissiveIntensity: 1.8 });
-    const tipL = new THREE.Mesh(geo('tip', () => new THREE.SphereGeometry(0.28, 6, 4)), tipMat);
-    const tipR = tipL.clone();
-    tipL.position.set(-6.1, 0, 2.9);
-    tipR.position.set(6.1, 0, 2.9);
-
-    const parts = [fuselage, nose, tailCone, wing, vfin, hfin, canopy, this.burner, tipL, tipR];
-    for (const m of parts) { m.castShadow = true; m.receiveShadow = false; }
     this.body = new THREE.Group();
-    this.body.add(...parts);
     this.group.add(this.body);
-    this.opaqueMats = [this.bodyMat, this.wingMat, darkMat, canopyMat, this.burnerMat, tipMat];
+
+    this.wingTipL = new THREE.Vector3(-6.1, 0, 2.9);
+    this.wingTipR = new THREE.Vector3(6.1, 0, 2.9);
+
+    // Contrail pools and effects
+    this.voxelPool = [];
+    this.ringPool = [];
+    this.lightningLines = null;
+    this.voxelTimer = 0;
+    this.ringTimer = 0;
+    this.synthOverlay = null;
+    this._disposables = [];
+    this.opaqueMats = [];
+
+    this._buildAirframe();
     this.ghosted = false;
 
     // ----- power-up visuals -----
@@ -220,6 +144,598 @@ export class Jet {
     this.trailColors = [new THREE.Color(0xfff2c0), new THREE.Color(trail), new THREE.Color(0x4a4458)];
   }
 
+  _buildAirframe() {
+    // 1. Remove old airframe children
+    while (this.body.children.length > 0) {
+      this.body.remove(this.body.children[0]);
+    }
+    if (this._disposables) {
+      for (const d of this._disposables) if (d && d.dispose) d.dispose();
+    }
+    this._disposables = [];
+    this.synthOverlay = null;
+
+    const finish = (this.equipped && this.equipped.finish) || 'finish_default';
+    const wing = (this.equipped && this.equipped.wing) || 'wing_default';
+    const pilot = this.pilot;
+
+    // Materials based on finish
+    let bodyMat, wingMat, darkMat, canopyMat;
+
+    if (finish === 'finish_gold') {
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xffcc22,
+        emissive: 0x553800,
+        emissiveIntensity: 0.5,
+        roughness: 0.15,
+        metalness: 0.92,
+        flatShading: true,
+      });
+      wingMat = new THREE.MeshStandardMaterial({
+        color: 0xffd54a,
+        emissive: 0x553800,
+        emissiveIntensity: 0.5,
+        roughness: 0.15,
+        metalness: 0.92,
+        flatShading: true,
+      });
+      darkMat = new THREE.MeshStandardMaterial({
+        color: 0x4a3610,
+        roughness: 0.3,
+        metalness: 0.75,
+        flatShading: true,
+      });
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0xffea88,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.45,
+        roughness: 0.15,
+        metalness: 0.7,
+        flatShading: true,
+      });
+    } else if (finish === 'finish_chrome') {
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.body,
+        roughness: 0.08,
+        metalness: 0.95,
+        flatShading: true,
+      });
+      wingMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.wing,
+        roughness: 0.08,
+        metalness: 0.95,
+        flatShading: true,
+      });
+      darkMat = new THREE.MeshStandardMaterial({
+        color: 0x2e2c38,
+        roughness: 0.12,
+        metalness: 0.88,
+        flatShading: true,
+      });
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0x88eaff,
+        emissive: 0x2a9ab8,
+        emissiveIntensity: 0.4,
+        roughness: 0.1,
+        metalness: 0.7,
+        flatShading: true,
+      });
+    } else if (finish === 'finish_synth') {
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x120d20,
+        roughness: 0.85,
+        metalness: 0.12,
+        flatShading: true,
+      });
+      wingMat = new THREE.MeshStandardMaterial({
+        color: 0x161026,
+        roughness: 0.85,
+        metalness: 0.12,
+        flatShading: true,
+      });
+      darkMat = new THREE.MeshStandardMaterial({
+        color: 0x090610,
+        roughness: 0.9,
+        metalness: 0.05,
+        flatShading: true,
+      });
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.accent || 0x4ff1ff,
+        emissive: pilot.colors.accent || 0x4ff1ff,
+        emissiveIntensity: 1.4,
+        roughness: 0.2,
+        flatShading: true,
+      });
+    } else if (finish === 'finish_holo') {
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.body,
+        emissive: pilot.colors.trail,
+        emissiveIntensity: 0.75,
+        transparent: true,
+        opacity: 0.6,
+        roughness: 0.12,
+        metalness: 0.35,
+        depthWrite: false,
+        flatShading: true,
+      });
+      wingMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.wing,
+        emissive: pilot.colors.accent || pilot.colors.trail,
+        emissiveIntensity: 0.75,
+        transparent: true,
+        opacity: 0.6,
+        roughness: 0.12,
+        metalness: 0.35,
+        depthWrite: false,
+        flatShading: true,
+      });
+      darkMat = new THREE.MeshStandardMaterial({
+        color: 0x3d2b5c,
+        emissive: pilot.colors.trail,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        flatShading: true,
+      });
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0xa8f5ff,
+        emissive: 0x4ff1ff,
+        emissiveIntensity: 1.2,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+        flatShading: true,
+      });
+    } else {
+      // finish_default
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.body,
+        roughness: 0.55,
+        metalness: 0.15,
+        flatShading: true,
+      });
+      wingMat = new THREE.MeshStandardMaterial({
+        color: pilot.colors.wing,
+        roughness: 0.55,
+        metalness: 0.15,
+        flatShading: true,
+      });
+      darkMat = new THREE.MeshStandardMaterial({
+        color: 0x2a2438,
+        roughness: 0.6,
+        metalness: 0.2,
+        flatShading: true,
+      });
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0x7fe9ff,
+        emissive: 0x2a9ab8,
+        emissiveIntensity: 0.35,
+        roughness: 0.2,
+        metalness: 0.4,
+        flatShading: true,
+      });
+    }
+
+    this.burnerMat = new THREE.MeshStandardMaterial({
+      color: 0xffb060,
+      emissive: 0xff9a2a,
+      emissiveIntensity: 2.8,
+      roughness: 0.4,
+      flatShading: true,
+    });
+    const tipMat = new THREE.MeshStandardMaterial({
+      color: pilot.colors.trail,
+      emissive: pilot.colors.trail,
+      emissiveIntensity: 2.2,
+    });
+
+    this.bodyMat = bodyMat;
+    this.wingMat = wingMat;
+    this.darkMat = darkMat;
+    this.canopyMat = canopyMat;
+    this.tipMat = tipMat;
+
+    this._disposables.push(bodyMat, wingMat, darkMat, canopyMat, this.burnerMat, tipMat);
+    this.opaqueMats = [bodyMat, wingMat, darkMat, canopyMat, this.burnerMat, tipMat];
+
+    const airframeParts = [];
+
+    // Core Fuselage, Nose, Tailcone, Canopy, Afterburner
+    const fuselage = new THREE.Mesh(geo('fuselage', () => {
+      const g = new THREE.CylinderGeometry(0.55, 1.35, 7.5, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), bodyMat);
+    fuselage.position.z = -0.4;
+    airframeParts.push(fuselage);
+
+    const nose = new THREE.Mesh(geo('nose', () => {
+      const g = new THREE.ConeGeometry(0.55, 2.4, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), darkMat);
+    nose.position.z = -5.3;
+    airframeParts.push(nose);
+
+    const tailCone = new THREE.Mesh(geo('tailcone', () => {
+      const g = new THREE.CylinderGeometry(1.35, 0.95, 1.6, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), darkMat);
+    tailCone.position.z = 4.1;
+    airframeParts.push(tailCone);
+
+    const canopy = new THREE.Mesh(geo('canopy', () => {
+      const g = new THREE.SphereGeometry(0.9, 8, 6);
+      g.scale(0.8, 0.8, 1.8);
+      return g;
+    }), canopyMat);
+    canopy.position.set(0, 0.85, -1.4);
+    airframeParts.push(canopy);
+
+    this.burner = new THREE.Mesh(geo('burner', () => {
+      const g = new THREE.ConeGeometry(0.8, 3.0, 6);
+      g.rotateX(Math.PI / 2);
+      return g;
+    }), this.burnerMat);
+    this.burner.position.z = 5.6;
+    airframeParts.push(this.burner);
+
+    // Tip lights helper
+    const makeTip = (pos) => {
+      const tip = new THREE.Mesh(geo('tip', () => new THREE.SphereGeometry(0.28, 6, 4)), tipMat);
+      tip.position.copy(pos);
+      return tip;
+    };
+
+    // Wings & Tail variants
+    if (wing === 'wing_xwing') {
+      // Forward swept wings
+      const xwing = new THREE.Mesh(geo('wing_xwing_main', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 2.6);
+        shape.lineTo(6.3, -0.6);
+        shape.lineTo(6.3, 0.6);
+        shape.lineTo(0, 3.6);
+        shape.lineTo(-6.3, 0.6);
+        shape.lineTo(-6.3, -0.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.15, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(xwing);
+
+      // Front canards
+      const canards = new THREE.Mesh(geo('wing_xwing_canards', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.2);
+        shape.lineTo(2.5, 0.8);
+        shape.lineTo(2.5, 1.4);
+        shape.lineTo(0, 0.8);
+        shape.lineTo(-2.5, 1.4);
+        shape.lineTo(-2.5, 0.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.1, -3.2);
+        return g;
+      }), wingMat);
+      airframeParts.push(canards);
+
+      // Vertical fin
+      const vfin = new THREE.Mesh(geo('vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 0);
+        shape.lineTo(2.2, 2.6);
+        shape.lineTo(1.2, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        g.translate(0.15, 0.6, 1.4);
+        return g;
+      }), bodyMat);
+      airframeParts.push(vfin);
+
+      this.wingTipL.set(-6.3, 0, 0);
+      this.wingTipR.set(6.3, 0, 0);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else if (wing === 'wing_triplane') {
+      // 3 stacked wing decks linked by vertical cylinder struts
+      const botDeck = new THREE.Mesh(geo('triplane_bot', () => new THREE.BoxGeometry(11.6, 0.22, 2.4)), wingMat);
+      botDeck.position.set(0, -0.55, 0.8);
+      const midDeck = new THREE.Mesh(geo('triplane_mid', () => new THREE.BoxGeometry(11.2, 0.22, 2.4)), wingMat);
+      midDeck.position.set(0, 0.25, 0.6);
+      const topDeck = new THREE.Mesh(geo('triplane_top', () => new THREE.BoxGeometry(12.0, 0.22, 2.5)), wingMat);
+      topDeck.position.set(0, 1.05, 0.4);
+      airframeParts.push(botDeck, midDeck, topDeck);
+
+      // Connecting struts
+      const strutGeo = geo('triplane_strut', () => new THREE.CylinderGeometry(0.08, 0.08, 1.7, 6));
+      for (const sx of [-4.5, -2.5, 2.5, 4.5]) {
+        for (const sz of [0.2, 1.0]) {
+          const strut = new THREE.Mesh(strutGeo, darkMat);
+          strut.position.set(sx, 0.25, sz);
+          airframeParts.push(strut);
+        }
+      }
+
+      // Classic rudder + elevator
+      const vfin = new THREE.Mesh(geo('vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 0);
+        shape.lineTo(2.2, 2.6);
+        shape.lineTo(1.2, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        g.translate(0.15, 0.6, 1.4);
+        return g;
+      }), bodyMat);
+      const hfin = new THREE.Mesh(geo('hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 1.3);
+        shape.lineTo(2.6, 2.0);
+        shape.lineTo(0, 1.4);
+        shape.lineTo(-2.6, 2.0);
+        shape.lineTo(-2.6, 1.3);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.3, 2.2);
+        return g;
+      }), darkMat);
+      airframeParts.push(vfin, hfin);
+
+      this.wingTipL.set(-6.0, 1.05, 0.4);
+      this.wingTipR.set(6.0, 1.05, 0.4);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else if (wing === 'wing_twinboom') {
+      // Main wing deck
+      const wingDeck = new THREE.Mesh(geo('twinboom_wing', () => new THREE.BoxGeometry(12.8, 0.32, 2.6)), wingMat);
+      wingDeck.position.set(0, 0, 1.0);
+      airframeParts.push(wingDeck);
+
+      // Dual tail booms
+      const boomGeo = geo('twinboom_boom', () => {
+        const g = new THREE.CylinderGeometry(0.32, 0.24, 7.2, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      });
+      const boomL = new THREE.Mesh(boomGeo, darkMat);
+      boomL.position.set(-2.7, 0.1, 3.6);
+      const boomR = new THREE.Mesh(boomGeo, darkMat);
+      boomR.position.set(2.7, 0.1, 3.6);
+      airframeParts.push(boomL, boomR);
+
+      // Twin vertical fins
+      const twinFinGeo = geo('twinboom_fin', () => new THREE.BoxGeometry(0.25, 2.0, 1.8));
+      const finL = new THREE.Mesh(twinFinGeo, bodyMat);
+      finL.position.set(-2.7, 1.1, 7.0);
+      const finR = new THREE.Mesh(twinFinGeo, bodyMat);
+      finR.position.set(2.7, 1.1, 7.0);
+      airframeParts.push(finL, finR);
+
+      // High bridging stabilizer
+      const bridge = new THREE.Mesh(geo('twinboom_bridge', () => new THREE.BoxGeometry(5.8, 0.22, 1.5)), darkMat);
+      bridge.position.set(0, 1.9, 7.0);
+      airframeParts.push(bridge);
+
+      this.wingTipL.set(-6.4, 0, 1.0);
+      this.wingTipR.set(6.4, 0, 1.0);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else if (wing === 'wing_saucer') {
+      // Flattened saucer disc
+      const saucerDisc = new THREE.Mesh(geo('saucer_disc', () => new THREE.CylinderGeometry(5.6, 5.6, 0.65, 24)), wingMat);
+      saucerDisc.position.set(0, -0.1, -0.4);
+      airframeParts.push(saucerDisc);
+
+      // Saucer outer torus ring
+      const saucerRim = new THREE.Mesh(geo('saucer_rim', () => {
+        const g = new THREE.TorusGeometry(5.6, 0.45, 8, 32);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      saucerRim.position.set(0, -0.1, -0.4);
+      airframeParts.push(saucerRim);
+
+      // Glowing rim node segments
+      const nodeGeo = geo('saucer_node', () => new THREE.SphereGeometry(0.34, 6, 4));
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const node = new THREE.Mesh(nodeGeo, tipMat);
+        node.position.set(Math.cos(ang) * 5.6, -0.1, -0.4 + Math.sin(ang) * 5.6);
+        airframeParts.push(node);
+      }
+
+      // Subtle dorsal stabilizer
+      const dorsal = new THREE.Mesh(geo('saucer_dorsal', () => new THREE.BoxGeometry(0.25, 1.4, 2.2)), bodyMat);
+      dorsal.position.set(0, 0.9, 2.2);
+      airframeParts.push(dorsal);
+
+      this.wingTipL.set(-5.8, -0.1, -0.4);
+      this.wingTipR.set(5.8, -0.1, -0.4);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else {
+      // wing_default (Standard Delta)
+      const sweptWing = new THREE.Mesh(geo('wing', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -1.2);
+        shape.lineTo(6.2, 2.4);
+        shape.lineTo(6.2, 3.4);
+        shape.lineTo(0, 2.0);
+        shape.lineTo(-6.2, 3.4);
+        shape.lineTo(-6.2, 2.4);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.2, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(sweptWing);
+
+      const vfin = new THREE.Mesh(geo('vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 0);
+        shape.lineTo(2.2, 2.6);
+        shape.lineTo(1.2, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        g.translate(0.15, 0.6, 1.4);
+        return g;
+      }), bodyMat);
+      airframeParts.push(vfin);
+
+      const hfin = new THREE.Mesh(geo('hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 1.3);
+        shape.lineTo(2.6, 2.0);
+        shape.lineTo(0, 1.4);
+        shape.lineTo(-2.6, 2.0);
+        shape.lineTo(-2.6, 1.3);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.3, 2.2);
+        return g;
+      }), darkMat);
+      airframeParts.push(hfin);
+
+      this.wingTipL.set(-6.1, 0, 2.9);
+      this.wingTipR.set(6.1, 0, 2.9);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+    }
+
+    for (const m of airframeParts) {
+      m.castShadow = true;
+      m.receiveShadow = false;
+    }
+    this.body.add(...airframeParts);
+
+    // Synthwave Wireframe Overlay:
+    if (finish === 'finish_synth') {
+      const wireMat = new THREE.MeshBasicMaterial({
+        color: pilot.colors.accent || pilot.colors.trail,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+      });
+      this._disposables.push(wireMat);
+      this.synthOverlay = new THREE.Group();
+      for (const m of airframeParts) {
+        if (m === this.burner || m.geometry === geo('tip', () => new THREE.SphereGeometry(0.28, 6, 4))) continue;
+        const wm = new THREE.Mesh(m.geometry, wireMat);
+        wm.position.copy(m.position);
+        wm.rotation.copy(m.rotation);
+        wm.scale.copy(m.scale).multiplyScalar(1.02);
+        this.synthOverlay.add(wm);
+      }
+      this.body.add(this.synthOverlay);
+    }
+
+    // Lightning Trail lines setup
+    if (this.lightningLines) {
+      this.group.remove(this.lightningLines);
+      this.lightningLines = null;
+    }
+    if (this.equipped && this.equipped.trail === 'trail_lightning') {
+      this.lightningLines = this._createLightningArcs();
+      this.group.add(this.lightningLines);
+    }
+  }
+
+  _createLightningArcs() {
+    const group = new THREE.Group();
+    const count = 6;
+    const arcLGeo = new THREE.BufferGeometry();
+    const arcRGeo = new THREE.BufferGeometry();
+    const posL = new Float32Array(count * 3);
+    const posR = new Float32Array(count * 3);
+    arcLGeo.setAttribute('position', new THREE.BufferAttribute(posL, 3));
+    arcRGeo.setAttribute('position', new THREE.BufferAttribute(posR, 3));
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x88f0ff,
+      transparent: true,
+      opacity: 0.85,
+      linewidth: 2,
+    });
+    this._disposables.push(arcLGeo, arcRGeo, mat);
+    const lineL = new THREE.Line(arcLGeo, mat);
+    const lineR = new THREE.Line(arcRGeo, mat);
+    group.add(lineL, lineR);
+    group.lineL = lineL;
+    group.lineR = lineR;
+    return group;
+  }
+
+  _ensureVoxelPool() {
+    if (this.voxelPool.length > 0) return;
+    const vGeo = geo('trail_voxel_geo', () => new THREE.BoxGeometry(0.7, 0.7, 0.7));
+    const mat = new THREE.MeshStandardMaterial({
+      color: this.pilot.colors.trail,
+      emissive: this.pilot.colors.accent || this.pilot.colors.trail,
+      emissiveIntensity: 0.8,
+      roughness: 0.4,
+      flatShading: true,
+    });
+    this._disposables.push(mat);
+    for (let i = 0; i < 20; i++) {
+      const mesh = new THREE.Mesh(vGeo, mat);
+      mesh.visible = false;
+      this.voxelPool.push({
+        mesh,
+        life: 0,
+        maxLife: 0.6,
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        rotVel: new THREE.Vector3(),
+        addedToScene: false,
+      });
+    }
+  }
+
+  _ensureRingPool() {
+    if (this.ringPool.length > 0) return;
+    const rGeo = geo('trail_ring_geo', () => new THREE.TorusGeometry(1.6, 0.16, 6, 20));
+    const mat = new THREE.MeshBasicMaterial({
+      color: this.pilot.colors.trail,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    this._disposables.push(mat);
+    for (let i = 0; i < 14; i++) {
+      const mesh = new THREE.Mesh(rGeo, mat);
+      mesh.visible = false;
+      this.ringPool.push({
+        mesh,
+        life: 0,
+        maxLife: 0.55,
+        pos: new THREE.Vector3(),
+        quat: new THREE.Quaternion(),
+        addedToScene: false,
+      });
+    }
+  }
+
+  setEquipped(equipped) {
+    this.equipped = Object.assign({}, this.equipped, equipped || {});
+    this._buildAirframe();
+  }
+
   setName(name) {
     this.group.remove(this.label);
     this.name = name;
@@ -241,9 +757,10 @@ export class Jet {
   _setGhost(on) {
     if (on === this.ghosted) return;
     this.ghosted = on;
+    const isHolo = this.equipped && this.equipped.finish === 'finish_holo';
     for (const m of this.opaqueMats) {
-      m.transparent = on;
-      m.opacity = on ? 0.35 : 1;
+      m.transparent = on || isHolo;
+      m.opacity = on ? 0.35 : (isHolo ? 0.6 : 1);
       m.needsUpdate = true;
     }
   }
@@ -253,6 +770,37 @@ export class Jet {
     const fx = info.fx || {};
     const boostAmt = info.boost ? 1 : 0;
     const superAmt = info.super ? 1 : 0;
+    const finish = this.equipped ? this.equipped.finish : 'finish_default';
+    const trailStyle = this.equipped ? this.equipped.trail : 'trail_default';
+
+    // Finish Flourishes
+    if (finish === 'finish_holo' && !this.ghosted) {
+      const pulse = 0.5 + Math.sin(time * 5) * 0.18;
+      this.bodyMat.opacity = pulse;
+      this.wingMat.opacity = pulse;
+      this.bodyMat.emissiveIntensity = 0.7 + Math.sin(time * 6) * 0.35;
+      this.wingMat.emissiveIntensity = 0.7 + Math.sin(time * 6) * 0.35;
+    }
+    if (this.synthOverlay) {
+      const synthPulse = 0.65 + Math.sin(time * 8) * 0.25;
+      for (const m of this.synthOverlay.children) {
+        if (m.material) m.material.opacity = synthPulse;
+      }
+    }
+    if (finish === 'finish_gold' && particles && Math.random() < 0.15) {
+      const off = new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 6)
+        .applyQuaternion(this.group.quaternion).add(this.group.position);
+      particles.spawn({
+        pos: off,
+        vel: { x: (Math.random() - 0.5) * 1.5, y: 0.5 + Math.random() * 1.5, z: (Math.random() - 0.5) * 1.5 },
+        life: 0.45,
+        size: 0.4,
+        drag: 1.5,
+        colors: GOLD_COLORS,
+        glow: 2.5,
+      });
+    }
+
     // Power-up visuals
     this.bubble.visible = Boolean(fx.shield);
     if (this.bubble.visible) { this.bubble.rotation.y += dt * 0.8; this.bubble.rotation.z -= dt * 0.5; this.bubbleMat.opacity = 0.14 + Math.sin(time * 6) * 0.04; }
@@ -281,6 +829,7 @@ export class Jet {
     if (this.teamRing.visible) { this.teamRing.rotation.z += dt * 0.9; this.teamRingMat.emissiveIntensity = 1.8 + Math.sin(time * 4) * 0.6; }
     this.superRing.visible = Boolean(info.super);
     if (this.superRing.visible) this.superRing.rotation.z += dt * 12;
+
     // Tumble: a harmless 360 spin on hit
     if (info.tumble > 0) {
       this.tumbleSpin = (info.tumble / 0.6) * Math.PI * 2;
@@ -288,28 +837,151 @@ export class Jet {
     } else if (this.body.rotation.x !== 0) {
       this.body.rotation.x = 0;
     }
-    // Exhaust puffs
+
+    // Contrail: Electric Lightning Arcs behind wingtips
+    if (this.lightningLines) {
+      const segs = 6;
+      const boost = info.boost || info.super ? 1.6 : 1.0;
+      const posL = this.lightningLines.lineL.geometry.attributes.position.array;
+      const posR = this.lightningLines.lineR.geometry.attributes.position.array;
+      for (let i = 0; i < segs; i++) {
+        const frac = i / (segs - 1);
+        const zOff = frac * 4.5 * boost;
+        const jx = (Math.random() - 0.5) * 0.7 * frac;
+        const jy = (Math.random() - 0.5) * 0.7 * frac;
+        posL[i * 3 + 0] = this.wingTipL.x + jx;
+        posL[i * 3 + 1] = this.wingTipL.y + jy;
+        posL[i * 3 + 2] = this.wingTipL.z + zOff;
+
+        posR[i * 3 + 0] = this.wingTipR.x + jx;
+        posR[i * 3 + 1] = this.wingTipR.y + jy;
+        posR[i * 3 + 2] = this.wingTipR.z + zOff;
+      }
+      this.lightningLines.lineL.geometry.attributes.position.needsUpdate = true;
+      this.lightningLines.lineR.geometry.attributes.position.needsUpdate = true;
+      this.lightningLines.lineL.material.opacity = 0.55 + Math.random() * 0.45;
+    }
+
+    // Contrail: 8-Bit Cubes (trail_voxel)
+    const scene = this.group.parent;
+    if (trailStyle === 'trail_voxel' && scene) {
+      this._ensureVoxelPool();
+      for (const v of this.voxelPool) {
+        if (!v.addedToScene) { scene.add(v.mesh); v.addedToScene = true; }
+        if (v.life > 0) {
+          v.life -= dt;
+          if (v.life <= 0) {
+            v.mesh.visible = false;
+          } else {
+            v.pos.addScaledVector(v.vel, dt);
+            v.mesh.position.copy(v.pos);
+            v.mesh.rotation.x += v.rotVel.x * dt;
+            v.mesh.rotation.y += v.rotVel.y * dt;
+            v.mesh.rotation.z += v.rotVel.z * dt;
+            const sc = (v.life / v.maxLife) * 1.1;
+            v.mesh.scale.set(sc, sc, sc);
+          }
+        }
+      }
+      this.voxelTimer -= dt;
+      if (this.voxelTimer <= 0) {
+        this.voxelTimer = info.boost || info.super ? 0.03 : 0.06;
+        const v = this.voxelPool.find((item) => item.life <= 0);
+        if (v) {
+          const back = new THREE.Vector3(0, 0, 6.8).applyQuaternion(this.group.quaternion).add(this.group.position);
+          v.pos.copy(back);
+          v.vel.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3 + 0.5, (Math.random() - 0.5) * 3);
+          v.rotVel.set(Math.random() * 8, Math.random() * 8, Math.random() * 8);
+          v.life = 0.6;
+          v.maxLife = 0.6;
+          v.mesh.visible = true;
+          v.mesh.position.copy(v.pos);
+        }
+      }
+    }
+
+    // Contrail: Plasma Donut Rings (trail_rings)
+    if (trailStyle === 'trail_rings' && scene) {
+      this._ensureRingPool();
+      for (const r of this.ringPool) {
+        if (!r.addedToScene) { scene.add(r.mesh); r.addedToScene = true; }
+        if (r.life > 0) {
+          r.life -= dt;
+          if (r.life <= 0) {
+            r.mesh.visible = false;
+          } else {
+            const frac = 1 - (r.life / r.maxLife);
+            const scale = 1.0 + frac * 4.0;
+            r.mesh.scale.set(scale, scale, 1);
+            r.mesh.material.opacity = (1 - frac) * 0.85;
+            r.mesh.position.copy(r.pos);
+            r.mesh.quaternion.copy(r.quat);
+          }
+        }
+      }
+      this.ringTimer -= dt;
+      if ((info.boost || info.super || fx.turbo) && this.ringTimer <= 0) {
+        this.ringTimer = 0.08;
+        const r = this.ringPool.find((item) => item.life <= 0);
+        if (r) {
+          const back = new THREE.Vector3(0, 0, 7.2).applyQuaternion(this.group.quaternion).add(this.group.position);
+          r.pos.copy(back);
+          r.quat.copy(this.group.quaternion);
+          r.life = 0.55;
+          r.maxLife = 0.55;
+          r.mesh.visible = true;
+          r.mesh.position.copy(r.pos);
+          r.mesh.quaternion.copy(r.quat);
+          r.mesh.scale.set(1, 1, 1);
+        }
+      }
+    }
+
+    // Exhaust puffs (with Prismatic Rainbow support)
     this.exhaustTimer -= dt;
     if (particles && this.exhaustTimer <= 0) {
       this.exhaustTimer = info.boost || info.super ? 0.025 : 0.06;
       const back = new THREE.Vector3(0, 0, 7.5).applyQuaternion(this.group.quaternion).add(this.group.position);
       const spread = 0.6;
+      let colors;
+      if (info.super) {
+        colors = SUPER_COLORS;
+      } else if (trailStyle === 'trail_rainbow') {
+        const h = (time * 1.6) % 1.0;
+        colors = [
+          new THREE.Color().setHSL(h, 1.0, 0.65),
+          new THREE.Color().setHSL((h + 0.15) % 1.0, 1.0, 0.55),
+          new THREE.Color().setHSL((h + 0.3) % 1.0, 1.0, 0.45),
+        ];
+      } else if (info.boost || fx.turbo) {
+        colors = this.trailColors;
+      } else {
+        colors = EXHAUST_COLORS;
+      }
+
       particles.spawn({
         pos: back,
         vel: { x: (Math.random() - 0.5) * spread * 4, y: (Math.random() - 0.5) * spread * 4 + 1, z: (Math.random() - 0.5) * spread * 4 },
         life: info.super ? 0.9 : info.boost ? 0.7 : 0.5,
         size: info.boost || info.super ? 0.9 : 0.6,
         drag: 1.2,
-        colors: info.super ? SUPER_COLORS : (info.boost || fx.turbo) ? this.trailColors : EXHAUST_COLORS,
-        glow: info.boost || info.super || fx.turbo ? 2.0 : 1.4,
+        colors,
+        glow: info.boost || info.super || fx.turbo || trailStyle === 'trail_rainbow' ? 2.0 : 1.4,
       });
     }
   }
 
   dispose() {
-    this.bodyMat.dispose();
-    this.wingMat.dispose();
-    this.burnerMat.dispose();
+    if (this._disposables) {
+      for (const d of this._disposables) if (d && d.dispose) d.dispose();
+    }
+    const scene = this.group.parent;
+    for (const v of this.voxelPool) {
+      if (scene && v.mesh.parent === scene) scene.remove(v.mesh);
+    }
+    for (const r of this.ringPool) {
+      if (scene && r.mesh.parent === scene) scene.remove(r.mesh);
+    }
     this.bubbleMat.dispose();
     this.turboMat.dispose();
     this.rapidMat.dispose();

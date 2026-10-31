@@ -356,12 +356,14 @@ function renderRoster(lobby) {
   ui.roster.innerHTML = '';
   for (const p of lobby.players) {
     const prev = game.names.get(p.id) || {};
-    game.names.set(p.id, { name: p.name, pilot: p.pilot, isBot: p.isBot, team: p.team || prev.team || null });
+    const equipped = p.equipped || p.eq || prev.equipped || null;
+    game.names.set(p.id, { name: p.name, pilot: p.pilot, isBot: p.isBot, team: p.team || prev.team || null, equipped });
+    if (p.id === game.myId && equipped) game.myEquipped = equipped;
     const pilot = pilotById(p.pilot);
     const li = document.createElement('li');
     if (p.isBot) li.classList.add('bot');
     li.style.borderColor = p.id === game.myId ? '' : trailCss(pilot) + '66';
-    li.appendChild(portraitElement(pilot, 34));
+    li.appendChild(portraitElement(pilot, 34, equipped));
     const txt = document.createElement('span');
     txt.className = 'r-text';
     const nm = document.createElement('span');
@@ -496,6 +498,17 @@ function connectSocket() {
   socket.on('gate', (e) => onGate(e));
   socket.on('finish', (e) => onFinish(e));
   socket.on('crown', (e) => onCrownEvent(e));
+  socket.on('playerEquip', ({ id, equipped }) => {
+    const n = game.names.get(id);
+    if (n) n.equipped = equipped;
+    if (id === game.myId) {
+      game.myEquipped = equipped;
+      if (me.jet) me.jet.setEquipped(equipped);
+    } else {
+      const r = remote.get(id);
+      if (r && r.jet) r.jet.setEquipped(equipped);
+    }
+  });
   socket.on('roll', (e) => { if (e.id !== game.myId) { const r = remote.get(e.id); if (r) r.rollingUntil = nowS() + BARREL_ROLL_TIME; } });
   socket.on('missileLock', () => {
     sound.updateMissileWarning(true, false, 1.2);
@@ -703,15 +716,21 @@ function startRound(data) {
   game.windVec.set(game.weather.wind.x || 0, 0, game.weather.wind.z || 0);
   if (ui.hudWeather) ui.hudWeather.textContent = game.weather.label;
 
-  for (const p of data.players) game.names.set(p.id, { name: p.name, pilot: p.pilot, isBot: p.isBot, team: p.team || null });
+  for (const p of data.players) {
+    const prev = game.names.get(p.id) || {};
+    const equipped = p.equipped || p.eq || prev.equipped || null;
+    game.names.set(p.id, { name: p.name, pilot: p.pilot, isBot: p.isBot, team: p.team || null, equipped });
+    if (p.id === game.myId && equipped) game.myEquipped = equipped;
+  }
 
   // Local jet
   const self = data.players.find((p) => p.id === game.myId);
   if (self) { game.pilotId = self.pilot; game.perk = perkMultipliers(self.pilot); }
   const myPilot = pilotById(game.pilotId);
   const myName = self ? self.name : (game.playerName || myPilot.callsign);
+  const myEq = game.myEquipped || (self && (self.equipped || self.eq)) || (game.names.get(game.myId) || {}).equipped || null;
   if (me.jet) { gfx.scene.remove(me.jet.group); me.jet.dispose(); }
-  me.jet = new Jet(myPilot, myName, portraitCanvas(myPilot, 64));
+  me.jet = new Jet(myPilot, myName, portraitCanvas(myPilot, 64, myEq), myEq);
   me.jet.setTeam(self ? self.team : null);
   gfx.scene.add(me.jet.group);
   if (self) { me.pos.set(self.pos.x, self.pos.y, self.pos.z); me.yaw = self.yaw; }
@@ -784,7 +803,7 @@ function startRound(data) {
   ui.hudCallsign.textContent = `${myPilot.callsign} · ${PERKS[myPilot.perk].label}`;
   const hp = ui.hudPortrait.getContext('2d');
   hp.clearRect(0, 0, ui.hudPortrait.width, ui.hudPortrait.height);
-  hp.drawImage(portraitCanvas(myPilot, 128), 0, 0, ui.hudPortrait.width, ui.hudPortrait.height);
+  hp.drawImage(portraitCanvas(myPilot, 128, myEq), 0, 0, ui.hudPortrait.width, ui.hudPortrait.height);
   ui.hudScore.textContent = '0';
   ui.btnFire.classList.toggle('hidden', data.mode === 'race');   // no fireworks on the race course
   controls.setEnabled(true);
@@ -849,7 +868,8 @@ function endRound(results) {
       : results.mode === 'teams' ? `${st.hits || 0} hits · ${st.pickups || 0} orbs`
       : `${st.balloons || 0} balloons · ${st.hits || 0} hits`;
     li.innerHTML = `<span class="rank">${i + 1}.</span><span class="portrait-slot"></span><span class="nm">${escapeHtml(r.name)}${r.id === game.myId ? ' (you)' : ''}<small>${escapeHtml(pilot.callsign)}${r.isBot ? ' · AI' : ''}${r.team ? ` · ${r.team === 'blue' ? '🔵 BLUE' : '🔴 RED'}` : ''}</small></span><span class="st">${statTxt}</span><span class="sc">${r.score}</span>`;
-    li.querySelector('.portrait-slot').replaceWith(portraitElement(pilot, 30));
+    const rEq = (game.names.get(r.id) || {}).equipped || null;
+    li.querySelector('.portrait-slot').replaceWith(portraitElement(pilot, 30, rEq));
     li.querySelector('.nm').style.color = teamCss || trailCss(pilot);
     if (r.newBests && r.newBests.length) {
       const pb = document.createElement('span');
@@ -908,7 +928,8 @@ function onSnapshot(snap) {
     if (!r) {
       const info = game.names.get(p.id) || { name: 'Pilot', pilot: PILOTS[0].id };
       const pilot = pilotById(info.pilot);
-      const jet = new Jet(pilot, info.name, portraitCanvas(pilot, 64));
+      const eq = info.equipped || null;
+      const jet = new Jet(pilot, info.name, portraitCanvas(pilot, 64, eq), eq);
       jet.setTeam(info.team || null);
       jet.group.position.set(p.p[0], p.p[1], p.p[2]);
       jet.group.quaternion.set(p.q[0], p.q[1], p.q[2], p.q[3]);
@@ -1088,7 +1109,9 @@ function volumeForDistance(d) { return clamp(1 - d / 500, 0.15, 1); }
 function onHit(e) {
   const p = arrToV(e.p);
   const palette = FIREWORK_PALETTES[Math.floor(Math.random() * FIREWORK_PALETTES.length)];
-  gfx.particles.burst(p, 46, 34, { colors: palette, life: 1.3, size: 1.8, gravity: 12, drag: 1.2 });
+  const shooterInfo = game.names.get(e.shooter);
+  const fwStyle = (shooterInfo && shooterInfo.equipped && shooterInfo.equipped.firework) || 'fw_default';
+  gfx.particles.fireworkBurst(p, 46, 34, fwStyle, { colors: palette, life: 1.3, size: 1.8, gravity: 12, drag: 1.2 });
   gfx.particles.burst(p, 18, 10, { colors: GOLD_COLORS, life: 0.8, size: 1.6 });
   sound.fireworkPop(volumeForDistance(p.distanceTo(me.pos)));
   if (e.victim === game.myId) {
@@ -1112,7 +1135,9 @@ function onHit(e) {
 function onPop(e) {
   const p = arrToV(e.p);
   const palette = FIREWORK_PALETTES[e.tint % FIREWORK_PALETTES.length];
-  gfx.particles.burst(p, 28, 22, { colors: palette, life: 1.0, size: 2.0, gravity: 8 });
+  const popperInfo = game.names.get(e.by);
+  const fwStyle = (popperInfo && popperInfo.equipped && popperInfo.equipped.firework) || 'fw_default';
+  gfx.particles.fireworkBurst(p, 28, 22, fwStyle, { colors: palette, life: 1.0, size: 2.0, gravity: 8 });
   const b = balloons.get(e.id);
   if (b) { b.alive = false; b.mesh.group.visible = false; }
   sound.balloonPop(volumeForDistance(p.distanceTo(me.pos)));
@@ -1393,7 +1418,8 @@ function onEmote(e) {
   emoteSprites.set(sprite, nowS() + 3);
   const info = game.names.get(e.id);
   const pilotIdx = Math.max(0, PILOTS.findIndex((p) => p.id === (info ? info.pilot : game.pilotId)));
-  sound.pilotChatter(pilotIdx, e.id === game.myId ? 1 : volumeForDistance(distToMe(e.p)));
+  const voiceStyle = (info && info.equipped && info.equipped.voice) || 'voice_default';
+  sound.pilotChatter(pilotIdx, e.id === game.myId ? 1 : volumeForDistance(distToMe(e.p)), voiceStyle);
 }
 
 function sendEmote(emoji) {
@@ -1402,7 +1428,8 @@ function sendEmote(emoji) {
   if (t - lastEmoteSent < 5) return;   // mirror of the server's 5s rate limit
   lastEmoteSent = t;
   socket.emit('emote', { emoji });
-  sound.pilotChatter(PILOTS.findIndex((p) => p.id === game.pilotId), 1);
+  const myVoice = (game.myEquipped && game.myEquipped.voice) || ((game.names.get(game.myId) || {}).equipped || {}).voice || 'voice_default';
+  sound.pilotChatter(PILOTS.findIndex((p) => p.id === game.pilotId), 1, myVoice);
 }
 
 function wireEmotes() {
