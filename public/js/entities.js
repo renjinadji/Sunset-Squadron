@@ -157,10 +157,12 @@ export class Jet {
     this.warpRings = null;
     this.cyberSpine = null;
     this.swingWings = null;
+    this.cyberTailRing = null;
 
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
     const fuselageChoice = (this.equipped && this.equipped.fuselage) || 'fuse_default';
+    const tailChoice = (this.equipped && this.equipped.tail) || 'tail_default';
     const canopyChoice = (this.equipped && this.equipped.canopy) || 'canopy_default';
     const intakeChoice = (this.equipped && this.equipped.intake) || 'intake_default';
     const nozzleChoice = (this.equipped && this.equipped.nozzle) || 'nozzle_default';
@@ -1373,21 +1375,6 @@ export class Jet {
       }), wingMat);
       airframeParts.push(canards);
 
-      // Vertical fin
-      const vfin = new THREE.Mesh(geo('vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.6, 0);
-        shape.lineTo(2.2, 2.6);
-        shape.lineTo(1.2, 2.6);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        g.translate(0.15, 0.6, 1.4);
-        return g;
-      }), bodyMat);
-      airframeParts.push(vfin);
-
       this.wingTipL.set(-6.3, 0, 0);
       this.wingTipR.set(6.3, 0, 0);
       airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
@@ -1412,35 +1399,6 @@ export class Jet {
         }
       }
 
-      // Classic rudder + elevator
-      const vfin = new THREE.Mesh(geo('vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.6, 0);
-        shape.lineTo(2.2, 2.6);
-        shape.lineTo(1.2, 2.6);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        g.translate(0.15, 0.6, 1.4);
-        return g;
-      }), bodyMat);
-      const hfin = new THREE.Mesh(geo('hfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.6, 1.3);
-        shape.lineTo(2.6, 2.0);
-        shape.lineTo(0, 1.4);
-        shape.lineTo(-2.6, 2.0);
-        shape.lineTo(-2.6, 1.3);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
-        g.rotateX(Math.PI / 2);
-        g.translate(0, 0.3, 2.2);
-        return g;
-      }), darkMat);
-      airframeParts.push(vfin, hfin);
-
       this.wingTipL.set(-6.0, 1.05, 0.4);
       this.wingTipR.set(6.0, 1.05, 0.4);
       airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
@@ -1462,14 +1420,6 @@ export class Jet {
       const boomR = new THREE.Mesh(boomGeo, darkMat);
       boomR.position.set(2.7, 0.1, 3.6);
       airframeParts.push(boomL, boomR);
-
-      // Twin vertical fins
-      const twinFinGeo = geo('twinboom_fin', () => new THREE.BoxGeometry(0.25, 2.0, 1.8));
-      const finL = new THREE.Mesh(twinFinGeo, bodyMat);
-      finL.position.set(-2.7, 1.1, 7.0);
-      const finR = new THREE.Mesh(twinFinGeo, bodyMat);
-      finR.position.set(2.7, 1.1, 7.0);
-      airframeParts.push(finL, finR);
 
       // High bridging stabilizer
       const bridge = new THREE.Mesh(geo('twinboom_bridge', () => new THREE.BoxGeometry(5.8, 0.22, 1.5)), darkMat);
@@ -1503,11 +1453,6 @@ export class Jet {
         node.position.set(Math.cos(ang) * 5.6, -0.1, -0.4 + Math.sin(ang) * 5.6);
         airframeParts.push(node);
       }
-
-      // Subtle dorsal stabilizer
-      const dorsal = new THREE.Mesh(geo('saucer_dorsal', () => new THREE.BoxGeometry(0.25, 1.4, 2.2)), bodyMat);
-      dorsal.position.set(0, 0.9, 2.2);
-      airframeParts.push(dorsal);
 
       this.wingTipL.set(-5.8, -0.1, -0.4);
       this.wingTipR.set(5.8, -0.1, -0.4);
@@ -1560,35 +1505,12 @@ export class Jet {
       }), wingMat);
       airframeParts.push(euroCanard);
 
-      // Tall Typhoon Vertical Fin with top ECM pod
-      const vfin = new THREE.Mesh(geo('wing_euro_vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.4, 0);
-        shape.lineTo(1.8, 2.9);
-        shape.lineTo(0.9, 2.9);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        g.translate(0.14, 0.6, 1.4);
-        return g;
-      }), bodyMat);
-      airframeParts.push(vfin);
-
-      const finPod = new THREE.Mesh(geo('wing_euro_fin_pod', () => {
-        const g = new THREE.CylinderGeometry(0.12, 0.1, 1.2, 6);
-        g.rotateX(-Math.PI / 2);
-        return g;
-      }), darkMat);
-      finPod.position.set(0, 3.5, 2.5);
-      airframeParts.push(finPod);
-
       this.wingTipL.set(-6.4, -0.15, 2.9);
       this.wingTipR.set(6.4, -0.15, 2.9);
       airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
 
     } else if (wing === 'wing_f14') {
-      // F-14 Tomcat: Variable-Geometry Swing Wings + Twin Canted Fins + Stabilators
+      // F-14 Tomcat: Variable-Geometry Swing Wings
       const glove = new THREE.Mesh(geo('wing_f14_glove', () => {
         const shape = new THREE.Shape();
         shape.moveTo(0, -1.2);
@@ -1604,41 +1526,6 @@ export class Jet {
         return g;
       }), wingMat);
       airframeParts.push(glove);
-
-      const twinFinGeo = geo('wing_f14_vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.2, 0);
-        shape.lineTo(1.6, 2.7);
-        shape.lineTo(0.8, 2.7);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        return g;
-      });
-      for (const sx of [-1.55, 1.55]) {
-        const sign = sx > 0 ? 1 : -1;
-        const vfin = new THREE.Mesh(twinFinGeo, bodyMat);
-        vfin.position.set(sx, 0.55, 2.2);
-        vfin.rotation.z = -sign * 0.08;
-        airframeParts.push(vfin);
-      }
-
-      const hfin = new THREE.Mesh(geo('wing_f14_hfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.8, 1.2);
-        shape.lineTo(2.8, 2.0);
-        shape.lineTo(0, 1.2);
-        shape.lineTo(-2.8, 2.0);
-        shape.lineTo(-2.8, 1.2);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
-        g.rotateX(Math.PI / 2);
-        g.translate(0, 0.2, 3.6);
-        return g;
-      }), darkMat);
-      airframeParts.push(hfin);
 
       // Swing wing panels
       const wingPanelLGeo = geo('wing_f14_panel_l', () => {
@@ -1708,47 +1595,12 @@ export class Jet {
       }), wingMat);
       airframeParts.push(f22Wing);
 
-      const f22FinGeo = geo('wing_f22_vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.4, 0);
-        shape.lineTo(1.6, 2.6);
-        shape.lineTo(0.6, 2.6);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        return g;
-      });
-      for (const sx of [-1.75, 1.75]) {
-        const sign = sx > 0 ? 1 : -1;
-        const fin = new THREE.Mesh(f22FinGeo, bodyMat);
-        fin.position.set(sx, 0.55, 2.4);
-        fin.rotation.z = -sign * 0.49;
-        airframeParts.push(fin);
-      }
-
-      const f22Hfin = new THREE.Mesh(geo('wing_f22_hfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.6, 0.8);
-        shape.lineTo(2.6, 1.7);
-        shape.lineTo(0, 1.4);
-        shape.lineTo(-2.6, 1.7);
-        shape.lineTo(-2.6, 0.8);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-        g.rotateX(Math.PI / 2);
-        g.translate(0, 0.25, 3.6);
-        return g;
-      }), darkMat);
-      airframeParts.push(f22Hfin);
-
       this.wingTipL.set(-6.5, -0.15, 2.65);
       this.wingTipR.set(6.5, -0.15, 2.65);
       airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
 
     } else if (wing === 'wing_su30') {
-      // Su-30 Flanker: Tandem Triplane Canards + Swept Wings + Twin Tails + Tail Sting
+      // Su-30 Flanker: Tandem Triplane Canards + Swept Wings + Tail Sting
       const su30Wing = new THREE.Mesh(geo('wing_su30_main', () => {
         const shape = new THREE.Shape();
         shape.moveTo(0, -1.0);
@@ -1792,23 +1644,6 @@ export class Jet {
       }), wingMat);
       airframeParts.push(su30Canards);
 
-      const su30FinGeo = geo('wing_su30_vfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.4, 0);
-        shape.lineTo(1.8, 2.8);
-        shape.lineTo(0.6, 2.8);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-        g.rotateY(-Math.PI / 2);
-        return g;
-      });
-      for (const sx of [-1.65, 1.65]) {
-        const vfin = new THREE.Mesh(su30FinGeo, bodyMat);
-        vfin.position.set(sx, 0.55, 2.2);
-        airframeParts.push(vfin);
-      }
-
       const tailSting = new THREE.Mesh(geo('wing_su30_sting', () => {
         const g = new THREE.CylinderGeometry(0.24, 0.16, 2.4, 6);
         g.rotateX(-Math.PI / 2);
@@ -1816,22 +1651,6 @@ export class Jet {
       }), darkMat);
       tailSting.position.set(0, 0.1, 4.8);
       airframeParts.push(tailSting);
-
-      const su30Hfin = new THREE.Mesh(geo('wing_su30_hfin', () => {
-        const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(2.8, 1.4);
-        shape.lineTo(2.8, 2.2);
-        shape.lineTo(0, 1.4);
-        shape.lineTo(-2.8, 2.2);
-        shape.lineTo(-2.8, 1.4);
-        shape.closePath();
-        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
-        g.rotateX(Math.PI / 2);
-        g.translate(0, 0.15, 3.6);
-        return g;
-      }), darkMat);
-      airframeParts.push(su30Hfin);
 
       this.wingTipL.set(-6.6, -0.15, 2.5);
       this.wingTipR.set(6.6, -0.15, 2.5);
@@ -1855,6 +1674,226 @@ export class Jet {
       }), wingMat);
       airframeParts.push(sweptWing);
 
+      this.wingTipL.set(-6.1, 0, 2.9);
+      this.wingTipR.set(6.1, 0, 2.9);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+    }
+
+    // Vertical & Horizontal Stabilizers ('tail')
+    if (tailChoice === 'tail_twin_canted') {
+      // Twin Canted Stealth Tails (25 deg dihedral cant)
+      const twinFinGeo = geo('tail_twin_canted_vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0);
+        shape.lineTo(1.6, 2.6);
+        shape.lineTo(0.6, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.65, 1.65]) {
+        const sign = sx > 0 ? 1 : -1;
+        const fin = new THREE.Mesh(twinFinGeo, bodyMat);
+        fin.position.set(sx, 0.55, 2.2);
+        fin.rotation.z = -sign * 0.44;
+        airframeParts.push(fin);
+      }
+
+      const hfin = new THREE.Mesh(geo('tail_twin_canted_hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 0.8);
+        shape.lineTo(2.6, 1.8);
+        shape.lineTo(0, 1.4);
+        shape.lineTo(-2.6, 1.8);
+        shape.lineTo(-2.6, 0.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.25, 3.6);
+        return g;
+      }), darkMat);
+      airframeParts.push(hfin);
+
+    } else if (tailChoice === 'tail_vtail') {
+      // Butterfly V-Tail Ruddervators (45 deg dihedral)
+      const vtailGeo = geo('tail_vtail_surface', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.5, 0.8);
+        shape.lineTo(2.2, 2.6);
+        shape.lineTo(0.6, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-0.65, 0.65]) {
+        const sign = sx > 0 ? 1 : -1;
+        const vtail = new THREE.Mesh(vtailGeo, bodyMat);
+        vtail.position.set(sx, 0.55, 2.0);
+        vtail.rotation.z = -sign * 0.785;
+        airframeParts.push(vtail);
+      }
+
+      const saddle = new THREE.Mesh(geo('tail_vtail_saddle', () => {
+        const g = new THREE.BoxGeometry(0.85, 0.28, 2.4);
+        return g;
+      }), darkMat);
+      saddle.position.set(0, 0.62, 2.4);
+      airframeParts.push(saddle);
+
+    } else if (tailChoice === 'tail_triple') {
+      // Constellation Triple Deck Vertical Stabilizers
+      const bridge = new THREE.Mesh(geo('tail_triple_bridge', () => {
+        const g = new THREE.BoxGeometry(6.6, 0.24, 1.8);
+        return g;
+      }), darkMat);
+      bridge.position.set(0, 0.65, 2.6);
+      airframeParts.push(bridge);
+
+      // Center fin
+      const centerFin = new THREE.Mesh(geo('tail_triple_center', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.2, 0);
+        shape.lineTo(1.8, 2.2);
+        shape.lineTo(0.8, 2.2);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      }), bodyMat);
+      centerFin.position.set(0.11, 0.75, 1.8);
+      airframeParts.push(centerFin);
+
+      // Left & Right endplate fins
+      const endplateGeo = geo('tail_triple_endplate', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.6);
+        shape.lineTo(1.8, -0.6);
+        shape.lineTo(1.6, 1.6);
+        shape.lineTo(0.4, 1.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-3.2, 3.2]) {
+        const endFin = new THREE.Mesh(endplateGeo, bodyMat);
+        endFin.position.set(sx, 0.65, 1.8);
+        airframeParts.push(endFin);
+      }
+
+    } else if (tailChoice === 'tail_split_ventral') {
+      // Foxhound Twin Dorsal & Ventral Fins
+      const dorsalGeo = geo('tail_ventral_dorsal', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0);
+        shape.lineTo(1.8, 2.8);
+        shape.lineTo(0.6, 2.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.45, 1.45]) {
+        const dFin = new THREE.Mesh(dorsalGeo, bodyMat);
+        dFin.position.set(sx, 0.55, 2.0);
+        airframeParts.push(dFin);
+      }
+
+      // Twin ventral strakes beneath fuselage
+      const ventralGeo = geo('tail_ventral_ventral', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.2, 0);
+        shape.lineTo(1.8, -1.2);
+        shape.lineTo(0.4, -1.2);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.15, 1.15]) {
+        const sign = sx > 0 ? 1 : -1;
+        const vFin = new THREE.Mesh(ventralGeo, darkMat);
+        vFin.position.set(sx, -0.45, 2.0);
+        vFin.rotation.z = -sign * 0.22;
+        airframeParts.push(vFin);
+      }
+
+      const hfin = new THREE.Mesh(geo('tail_ventral_hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.8, 1.2);
+        shape.lineTo(2.8, 2.0);
+        shape.lineTo(0, 1.2);
+        shape.lineTo(-2.8, 2.0);
+        shape.lineTo(-2.8, 1.2);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.25, 3.6);
+        return g;
+      }), darkMat);
+      airframeParts.push(hfin);
+
+    } else if (tailChoice === 'tail_cyber_ring') {
+      // Quantum Torus Stabilizer (Central Aerodynamic Pylon + Spinning Neon Torus Ring)
+      const pylon = new THREE.Mesh(geo('tail_cyber_pylon', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(1.8, 0);
+        shape.lineTo(1.4, 1.4);
+        shape.lineTo(0.4, 1.4);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      pylon.position.set(0.11, 0.6, 2.0);
+      airframeParts.push(pylon);
+
+      const cyberRingMat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x00f0ff,
+        emissiveIntensity: 3.0,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      });
+      this._disposables.push(cyberRingMat);
+
+      const torusRing = new THREE.Mesh(geo('tail_cyber_ring_mesh', () => {
+        const g = new THREE.TorusGeometry(1.25, 0.08, 6, 24);
+        return g;
+      }), cyberRingMat);
+      torusRing.position.set(0, 1.85, 2.6);
+      this.cyberTailRing = torusRing;
+      airframeParts.push(torusRing);
+
+      // 4 Magnetic node studs
+      const nodeGeo = geo('tail_cyber_node', () => new THREE.SphereGeometry(0.16, 6, 4));
+      for (const [nx, ny] of [[0, 1.25], [0, -1.25], [1.25, 0], [-1.25, 0]]) {
+        const node = new THREE.Mesh(nodeGeo, tipMat);
+        node.position.set(nx, 1.85 + ny, 2.6);
+        airframeParts.push(node);
+      }
+
+      // Horizontal stubs
+      const hstubs = new THREE.Mesh(geo('tail_cyber_hstubs', () => {
+        const g = new THREE.BoxGeometry(3.6, 0.16, 1.2);
+        return g;
+      }), bodyMat);
+      hstubs.position.set(0, 0.35, 2.8);
+      airframeParts.push(hstubs);
+
+    } else {
+      // tail_default: Classic Swept Fin & Elevator
       const vfin = new THREE.Mesh(geo('vfin', () => {
         const shape = new THREE.Shape();
         shape.moveTo(0, 0);
@@ -1884,10 +1923,6 @@ export class Jet {
         return g;
       }), darkMat);
       airframeParts.push(hfin);
-
-      this.wingTipL.set(-6.1, 0, 2.9);
-      this.wingTipR.set(6.1, 0, 2.9);
-      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
     }
 
     for (const m of airframeParts) {
@@ -2103,6 +2138,10 @@ export class Jet {
     }
     if (this.cyberSpine) {
       this.cyberSpine.material.emissiveIntensity = 2.0 + Math.sin(time * 8) * 1.0;
+    }
+    if (this.cyberTailRing) {
+      this.cyberTailRing.rotation.z += dt * 4.0;
+      this.cyberTailRing.material.emissiveIntensity = 2.4 + Math.sin(time * 10) * 1.0;
     }
     // F-14 Tomcat Swing Wings: Dynamic Variable Sweep
     if (this.swingWings) {

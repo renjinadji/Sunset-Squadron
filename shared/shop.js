@@ -7,11 +7,12 @@
  * single source of truth for cosmetic parameters, pricing and round sponsors.
  */
 
-const SHOP_CATEGORIES = ['wing', 'fuselage', 'finish', 'canopy', 'intake', 'nozzle', 'trail', 'firework', 'voice', 'visor'];
+const SHOP_CATEGORIES = ['wing', 'fuselage', 'tail', 'finish', 'canopy', 'intake', 'nozzle', 'trail', 'firework', 'voice', 'visor'];
 
 const DEFAULT_EQUIPPED = {
   wing: 'wing_default',
   fuselage: 'fuse_default',
+  tail: 'tail_default',
   finish: 'finish_default',
   canopy: 'canopy_default',
   intake: 'intake_default',
@@ -156,6 +157,62 @@ const SHOP_ITEMS = [
     description: 'Sci-fi carbon exoskeleton exposing an illuminated pulsing quantum conduit spine.',
     price: 1750,
     params: { style: 'cyber', illuminatedSpine: true, exoRibs: 4 },
+  },
+
+  // --- Vertical Stabilizers ('tail') ---
+  {
+    id: 'tail_default',
+    category: 'tail',
+    name: 'Classic Swept Fin',
+    desc: 'Balanced high-aspect swept single vertical stabilizer with aerodynamic rudder.',
+    description: 'Balanced high-aspect swept single vertical stabilizer with aerodynamic rudder.',
+    price: 0,
+    params: { style: 'standard' },
+  },
+  {
+    id: 'tail_twin_canted',
+    category: 'tail',
+    name: 'Twin Canted Stealth',
+    desc: 'Outward-angled twin vertical stabilizers with radar-deflecting 25° dihedral cant.',
+    description: 'Outward-angled twin vertical stabilizers with radar-deflecting 25° dihedral cant.',
+    price: 400,
+    params: { style: 'twin_canted', canted: true, cantAngle: 0.44 },
+  },
+  {
+    id: 'tail_vtail',
+    category: 'tail',
+    name: 'Butterfly V-Tail',
+    desc: 'Combined yaw-pitch butterfly ruddervators forming a distinct 45° angled dihedral V.',
+    description: 'Combined yaw-pitch butterfly ruddervators forming a distinct 45° angled dihedral V.',
+    price: 650,
+    params: { style: 'vtail', ruddervators: true, angle: 0.785 },
+  },
+  {
+    id: 'tail_triple',
+    category: 'tail',
+    name: 'Constellation Triple Fin',
+    desc: 'High-stability vintage triple vertical stabilizers mounted across the horizontal tail.',
+    description: 'High-stability vintage triple vertical stabilizers mounted across the horizontal tail.',
+    price: 900,
+    params: { style: 'triple', fins: 3, endplates: true },
+  },
+  {
+    id: 'tail_split_ventral',
+    category: 'tail',
+    name: 'Foxhound Twin & Ventrals',
+    desc: 'Massive Mach-3 twin dorsal stabilizers paired with twin downward ventral strakes.',
+    description: 'Massive Mach-3 twin dorsal stabilizers paired with twin downward ventral strakes.',
+    price: 1250,
+    params: { style: 'split_ventral', twinDorsal: true, ventralFins: true },
+  },
+  {
+    id: 'tail_cyber_ring',
+    category: 'tail',
+    name: 'Quantum Torus Stabilizer',
+    desc: 'Sci-fi toroidal ion vector stabilizer with an illuminated pulsing neon magnetic core ring.',
+    description: 'Sci-fi toroidal ion vector stabilizer with an illuminated pulsing neon magnetic core ring.',
+    price: 1600,
+    params: { style: 'cyber_ring', torusHalo: true, pulsingRing: true },
   },
 
   // --- Finishes ('finish') ---

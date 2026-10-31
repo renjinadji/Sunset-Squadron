@@ -433,6 +433,15 @@ function renderRoster(lobby) {
         txt.appendChild(fuseTag);
       }
     }
+    if (equipped && equipped.tail && equipped.tail !== 'tail_default') {
+      const tl = itemById(equipped.tail);
+      if (tl) {
+        const tlTag = document.createElement('span');
+        tlTag.className = 'tag cosmetic-tag tail-tag';
+        tlTag.textContent = tl.name.split(' ')[0].toUpperCase();
+        txt.appendChild(tlTag);
+      }
+    }
     if (equipped && equipped.finish && equipped.finish !== 'finish_default') {
       const f = itemById(equipped.finish);
       if (f) {
@@ -944,6 +953,10 @@ function previewItem(item) {
     turntableYaw = 0.58;
     turntablePitch = 0.22;
     sound.blip(600, 0.25);
+  } else if (item.category === 'tail') {
+    turntableYaw = 2.15;
+    turntablePitch = 0.35;
+    sound.blip(580, 0.25);
   } else if (item.category === 'canopy') {
     turntableYaw = 0.35;
     turntablePitch = 0.18;

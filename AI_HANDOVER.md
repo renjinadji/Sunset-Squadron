@@ -991,9 +991,26 @@
     * In `previewItem()`, selecting `Wings` re-orients turntable camera to an elevated top-down angle (`turntableYaw = 0.42, turntablePitch = 0.32`).
     * Previewing `wing_f14` triggers `previewBoostTimer = 3.5`, demonstrating the swing wings sweeping back dynamically in the 3D turntable preview.
   - **Automated Tests:** Updated `test/shop.test.js` asserting all 9 wing items and procedural parameters. 51/51 tests pass.
+- **Procedural Vertical Stabilizers ('tail') Cosmetics Engine (`shared/shop.js`, `public/js/entities.js`, `public/index.html`, `public/style.css`, `public/js/main.js`, `test/shop.test.js`):**
+  - **Stabilizer Category & Equipment Sync:** Added `tail` as the 11th cosmetic category in `SHOP_CATEGORIES` and `DEFAULT_EQUIPPED` (`tail_default`).
+  - **Procedural Vertical Stabilizers Catalog (6 Styles):**
+    * Classic Swept Fin (`tail_default`, 0 CR): factory classic single swept vertical fin with horizontal stabilizer elevators.
+    * Twin Canted Stealth (`tail_twin_canted`, 400 CR): dual 25° outward-canted stealth vertical stabilizers with trailing edge rudders.
+    * Butterfly V-Tail (`tail_vtail`, 650 CR): combined yaw-pitch butterfly ruddervators forming a distinct 45° angled dihedral V.
+    * Constellation Triple Fin (`tail_triple`, 900 CR): vintage triple vertical stabilizers with a central rudder and dual tip endplate fins.
+    * Foxhound Twin & Ventrals (`tail_split_ventral`, 1250 CR): massive Mach-3 twin dorsal stabilizers paired with twin downward ventral strakes.
+    * Quantum Torus Stabilizer (`tail_cyber_ring`, 1600 CR): sci-fi toroidal ion vector stabilizer with an illuminated spinning neon magnetic core ring.
+  - **3D Procedural Mesh & Kinematics Integration (`public/js/entities.js`):**
+    * Decoupled vertical and horizontal stabilizers from wing definitions into a modular `tailChoice` block so any wing can be paired with any tail.
+    * In `updateVisual()`, added real-time rotation (`rotation.z += dt * 4.0`) and emissive pulse animation for `tail_cyber_ring`'s quantum torus halo (`this.cyberTailRing`).
+  - **Hangar UI & Preview Integration (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    * Added dedicated `Tails` touch tab in `#hangar-tabs`.
+    * Selecting tail cosmetics automatically re-orients the 3D turntable camera to a rear 3/4 high angle (`turntableYaw = 2.15, turntablePitch = 0.35`) and plays an audio blip.
+    * Added `.tail-tag` badge for lobby roster cards.
+  - **Automated Tests:** Updated `test/shop.test.js` asserting all 11 categories and procedural tail parameters. All 51 tests pass.
 
 ### Pending / Next Up
-- All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!
+- All 11 cosmetic categories in the Sky Credits & Procedural Cosmetic Shop engine are complete!
 - Optional future enhancements:
   * Additional procedural finish shaders or animated particle styles.
   * Additional party sponsor modifiers (e.g. low-gravity floating isles, mirror course).
