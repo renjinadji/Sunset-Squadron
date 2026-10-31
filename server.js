@@ -18,6 +18,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const PILOT_DATA = require('./shared/pilots');
+const SHOP_DATA = require('./shared/shop');
 const { Leaderboard } = require('./leaderboard');
 const {
   mulberry32, quatFromYPR, forwardFromYP, wrapAngle,
@@ -301,9 +302,11 @@ state.weather = generateWeather(state.seed);
 function now() { return Date.now() / 1000; }
 
 function makePlayer(id, name, pilot, isBot) {
+  const wallet = !isBot ? leaderboard.getOrCreateWallet(name) : null;
   return {
     id, name, pilot, isBot,
     perk: perkMultipliers(pilot),
+    equipped: wallet ? wallet.equipped : { ...SHOP_DATA.DEFAULT_EQUIPPED },
     fx: {},                       // active power-ups: type -> expiry time (seconds)
     stats: { balloons: 0, hits: 0, crownTime: 0, pickups: 0 },
     pos: { x: 0, y: 80, z: 0 },
@@ -439,7 +442,16 @@ function awardStyle(p, kind, base, t) {
   return pts;
 }
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, pilot: p.pilot, isBot: p.isBot, gone: Boolean(p.gone), score: Math.round(p.score), ...(p.team ? { team: p.team } : {}) };
+  return {
+    id: p.id,
+    name: p.name,
+    pilot: p.pilot,
+    isBot: p.isBot,
+    gone: Boolean(p.gone),
+    score: Math.round(p.score),
+    ...(p.team ? { team: p.team } : {}),
+    ...(p.equipped ? { eq: p.equipped } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -702,9 +714,50 @@ app.get('/js/pilots-data.js', (req, res) => {
   res.type('application/javascript').set('Cache-Control', 'no-cache').send(PILOT_DATA.toEsModuleSource());
 });
 
+app.get('/js/shop-data.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-cache').send(SHOP_DATA.toEsModuleSource());
+});
+
+app.get('/api/shop', (req, res) => {
+  res.json({
+    categories: SHOP_DATA.SHOP_CATEGORIES,
+    defaultEquipped: SHOP_DATA.DEFAULT_EQUIPPED,
+    items: SHOP_DATA.SHOP_ITEMS,
+    sponsors: SHOP_DATA.ROUND_SPONSORS,
+  });
+});
+
 app.get('/api/leaderboard', (req, res) => {
   const n = clamp(parseInt(req.query.limit, 10) || 10, 1, 100);
   res.set('Cache-Control', 'no-store').json(leaderboard.summary(n));
+});
+
+app.get('/api/wallet', (req, res) => {
+  const name = (req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Player name is required (?name=...)' });
+  const wallet = leaderboard.getOrCreateWallet(name);
+  res.set('Cache-Control', 'no-store').json(wallet);
+});
+
+app.post('/api/wallet/purchase', express.json({ limit: '16kb' }), (req, res) => {
+  const { name, itemId } = req.body || {};
+  const result = leaderboard.purchaseItem(name, itemId);
+  if (!result.ok) return res.status(400).json(result);
+  res.json(result);
+});
+
+app.post('/api/wallet/equip', express.json({ limit: '16kb' }), (req, res) => {
+  const { name, itemId } = req.body || {};
+  const result = leaderboard.equipItem(name, itemId);
+  if (!result.ok) return res.status(400).json(result);
+  res.json(result);
+});
+
+app.post('/api/wallet/sponsor', express.json({ limit: '16kb' }), (req, res) => {
+  const { name, sponsorId } = req.body || {};
+  const result = leaderboard.spendCreditsForSponsor(name, sponsorId);
+  if (!result.ok) return res.status(400).json(result);
+  res.json(result);
 });
 
 app.get('/api/pilots', (req, res) => {
@@ -1043,6 +1096,35 @@ io.on('connection', (socket) => {
     player.pilot = data.pilot;
     player.perk = perkMultipliers(data.pilot);
     broadcastLobby();
+  });
+
+  socket.on('shopBuy', (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') return;
+    const res = leaderboard.purchaseItem(player.name, data.itemId);
+    if (res.ok) {
+      player.equipped = res.wallet.equipped;
+      broadcastLobby();
+    }
+    if (typeof ack === 'function') ack(res);
+  });
+
+  socket.on('shopEquip', (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') return;
+    const res = leaderboard.equipItem(player.name, data.itemId);
+    if (res.ok) {
+      player.equipped = res.wallet.equipped;
+      broadcastLobby();
+    }
+    if (typeof ack === 'function') ack(res);
+  });
+
+  socket.on('shopSponsor', (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') return;
+    const res = leaderboard.spendCreditsForSponsor(player.name, data.sponsorId);
+    if (res.ok) {
+      broadcastLobby();
+    }
+    if (typeof ack === 'function') ack(res);
   });
 
   socket.on('setSettings', (data) => {

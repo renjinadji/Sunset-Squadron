@@ -8,15 +8,28 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_EQUIPPED, itemById, sponsorById } = require('./shared/shop');
 
 const MODES = ['crown', 'blitz', 'race', 'teams'];
 
 function emptyBoard() {
-  return { version: 1, updatedAt: null, modes: { crown: {}, blitz: {}, race: {}, teams: {} } };
+  return { version: 1, updatedAt: null, modes: { crown: {}, blitz: {}, race: {}, teams: {} }, wallets: {} };
 }
 
 function emptyEntry(name, pilot) {
   return { name, pilot, wins: 0, rounds: 0, bestScore: 0, totalPoints: 0, balloons: 0, hits: 0, lastPlayed: null };
+}
+
+function emptyWallet(displayName) {
+  const raw = (displayName || '').trim();
+  return {
+    displayName: raw || 'Pilot',
+    credits: 0,
+    lifetimeCredits: 0,
+    unlocked: Object.values(DEFAULT_EQUIPPED),
+    equipped: { ...DEFAULT_EQUIPPED },
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 class Leaderboard {
@@ -43,9 +56,11 @@ class Leaderboard {
         const src = parsed.modes[mode];
         if (src && typeof src === 'object') this.board.modes[mode] = src;
       }
+      this.board.wallets = (parsed.wallets && typeof parsed.wallets === 'object') ? parsed.wallets : {};
       this.board.updatedAt = parsed.updatedAt || null;
       const n = MODES.reduce((s, m) => s + Object.keys(this.board.modes[m]).length, 0);
-      console.log(`[leaderboard] loaded ${n} entries from ${this.file}`);
+      const w = Object.keys(this.board.wallets).length;
+      console.log(`[leaderboard] loaded ${n} entries, ${w} wallets from ${this.file}`);
     } catch (err) {
       // A corrupt file is moved aside rather than overwritten so nothing is lost.
       console.warn(`[leaderboard] could not read ${this.file}: ${err.message} - starting fresh`);
@@ -131,6 +146,106 @@ class Leaderboard {
       .map((e, i) => ({ rank: i + 1, ...e }));
   }
 
+  // -------------------------------------------------------------------------
+  // Player Wallets (Sky Credits & Cosmetics)
+  // -------------------------------------------------------------------------
+  static normalizeName(name) {
+    return (name || '').trim().toLowerCase();
+  }
+
+  getOrCreateWallet(playerName) {
+    const raw = (playerName || '').trim();
+    if (!raw) return null;
+    const key = Leaderboard.normalizeName(raw);
+    if (!this.board.wallets) this.board.wallets = {};
+    let w = this.board.wallets[key];
+    if (!w) {
+      w = emptyWallet(raw);
+      this.board.wallets[key] = w;
+      this.save();
+    } else {
+      w.displayName = raw;
+      if (!Array.isArray(w.unlocked)) {
+        w.unlocked = Object.values(DEFAULT_EQUIPPED);
+      } else {
+        for (const defId of Object.values(DEFAULT_EQUIPPED)) {
+          if (!w.unlocked.includes(defId)) w.unlocked.push(defId);
+        }
+      }
+      if (!w.equipped || typeof w.equipped !== 'object') {
+        w.equipped = { ...DEFAULT_EQUIPPED };
+      } else {
+        for (const [cat, defId] of Object.entries(DEFAULT_EQUIPPED)) {
+          if (!w.equipped[cat]) w.equipped[cat] = defId;
+        }
+      }
+      if (typeof w.credits !== 'number') w.credits = 0;
+      if (typeof w.lifetimeCredits !== 'number') w.lifetimeCredits = w.credits;
+    }
+    return w;
+  }
+
+  awardCredits(playerName, amount) {
+    const w = this.getOrCreateWallet(playerName);
+    if (!w) return null;
+    const amt = Math.max(0, Math.round(Number(amount) || 0));
+    w.credits += amt;
+    w.lifetimeCredits += amt;
+    const stamp = new Date().toISOString();
+    w.updatedAt = stamp;
+    this.board.updatedAt = stamp;
+    this.save();
+    return w;
+  }
+
+  purchaseItem(playerName, itemId) {
+    const item = itemById(itemId);
+    if (!item) return { ok: false, error: 'Item not found' };
+    const w = this.getOrCreateWallet(playerName);
+    if (!w) return { ok: false, error: 'Invalid player name' };
+    if (w.unlocked.includes(itemId)) return { ok: false, error: 'Item already unlocked' };
+    if (w.credits < item.price) return { ok: false, error: 'Insufficient Sky Credits' };
+
+    w.credits -= item.price;
+    w.unlocked.push(itemId);
+    w.equipped[item.category] = itemId;
+    const stamp = new Date().toISOString();
+    w.updatedAt = stamp;
+    this.board.updatedAt = stamp;
+    this.save();
+    return { ok: true, wallet: w, item };
+  }
+
+  equipItem(playerName, itemId) {
+    const item = itemById(itemId);
+    if (!item) return { ok: false, error: 'Item not found' };
+    const w = this.getOrCreateWallet(playerName);
+    if (!w) return { ok: false, error: 'Invalid player name' };
+    if (!w.unlocked.includes(itemId)) return { ok: false, error: 'Item not unlocked' };
+
+    w.equipped[item.category] = itemId;
+    const stamp = new Date().toISOString();
+    w.updatedAt = stamp;
+    this.board.updatedAt = stamp;
+    this.save();
+    return { ok: true, wallet: w, item };
+  }
+
+  spendCreditsForSponsor(playerName, sponsorId) {
+    const sponsor = sponsorById(sponsorId);
+    if (!sponsor) return { ok: false, error: 'Sponsor not found' };
+    const w = this.getOrCreateWallet(playerName);
+    if (!w) return { ok: false, error: 'Invalid player name' };
+    if (w.credits < sponsor.cost) return { ok: false, error: 'Insufficient Sky Credits' };
+
+    w.credits -= sponsor.cost;
+    const stamp = new Date().toISOString();
+    w.updatedAt = stamp;
+    this.board.updatedAt = stamp;
+    this.save();
+    return { ok: true, wallet: w, sponsor };
+  }
+
   summary(n = 10) {
     return {
       updatedAt: this.board.updatedAt,
@@ -141,6 +256,7 @@ class Leaderboard {
         blitz: Object.keys(this.board.modes.blitz).length,
         race: Object.keys(this.board.modes.race).length,
         teams: Object.keys(this.board.modes.teams).length,
+        wallets: Object.keys(this.board.wallets || {}).length,
       },
     };
   }

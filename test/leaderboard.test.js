@@ -138,3 +138,78 @@ test('concurrent recordRound calls serialise their writes without losing data', 
   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.strictEqual(Object.keys(onDisk.modes.race).length, 10);
 });
+
+test('wallets: getOrCreateWallet initializes with defaults and normalizes name', async () => {
+  const { file } = tmpBoard();
+  const lb = new Leaderboard(file);
+  const w1 = lb.getOrCreateWallet('  Renji  ');
+  assert.strictEqual(w1.displayName, 'Renji');
+  assert.strictEqual(w1.credits, 0);
+  assert.strictEqual(w1.lifetimeCredits, 0);
+  assert.ok(w1.unlocked.includes('wing_default'));
+  assert.strictEqual(w1.equipped.wing, 'wing_default');
+  assert.strictEqual(w1.equipped.finish, 'finish_default');
+  await lb.save();
+
+  // Re-fetch with different casing should return same wallet
+  const w2 = lb.getOrCreateWallet('renji');
+  assert.strictEqual(w2.displayName, 'renji');
+  assert.strictEqual(w2, w1);
+});
+
+test('wallets: awardCredits, purchaseItem, equipItem, and spendCreditsForSponsor', async () => {
+  const { file } = tmpBoard();
+  const lb = new Leaderboard(file);
+  const name = 'AcePilot';
+
+  // 1. Award credits
+  lb.awardCredits(name, 1000);
+  await lb.save();
+  let w = lb.getOrCreateWallet(name);
+  assert.strictEqual(w.credits, 1000);
+  assert.strictEqual(w.lifetimeCredits, 1000);
+
+  // 2. Purchase item
+  // wing_xwing costs 400 CR
+  const buyRes = lb.purchaseItem(name, 'wing_xwing');
+  assert.strictEqual(buyRes.ok, true);
+  assert.strictEqual(buyRes.wallet.credits, 600);
+  assert.ok(buyRes.wallet.unlocked.includes('wing_xwing'));
+  assert.strictEqual(buyRes.wallet.equipped.wing, 'wing_xwing');
+
+  // Purchasing already unlocked item fails
+  const rebuyRes = lb.purchaseItem(name, 'wing_xwing');
+  assert.strictEqual(rebuyRes.ok, false);
+  assert.strictEqual(rebuyRes.error, 'Item already unlocked');
+
+  // Purchasing item without enough credits fails
+  // wing_saucer costs 1500 CR
+  const unaffordableRes = lb.purchaseItem(name, 'wing_saucer');
+  assert.strictEqual(unaffordableRes.ok, false);
+  assert.strictEqual(unaffordableRes.error, 'Insufficient Sky Credits');
+
+  // 3. Equip item
+  // Equip back to default wing
+  const equipRes = lb.equipItem(name, 'wing_default');
+  assert.strictEqual(equipRes.ok, true);
+  assert.strictEqual(equipRes.wallet.equipped.wing, 'wing_default');
+
+  // Equip locked item fails
+  const lockedEquip = lb.equipItem(name, 'wing_saucer');
+  assert.strictEqual(lockedEquip.ok, false);
+  assert.strictEqual(lockedEquip.error, 'Item not unlocked');
+
+  // 4. Spend credits for sponsor
+  // sponsor_double_event costs 150 CR
+  const sponsorRes = lb.spendCreditsForSponsor(name, 'sponsor_double_event');
+  assert.strictEqual(sponsorRes.ok, true);
+  assert.strictEqual(sponsorRes.wallet.credits, 450); // 600 - 150
+
+  // 5. Persistence across new instance
+  await lb.save();
+  const lb2 = new Leaderboard(file);
+  const wReloaded = lb2.getOrCreateWallet(name);
+  assert.strictEqual(wReloaded.credits, 450);
+  assert.ok(wReloaded.unlocked.includes('wing_xwing'));
+  assert.strictEqual(wReloaded.equipped.wing, 'wing_default');
+});
