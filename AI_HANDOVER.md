@@ -913,6 +913,20 @@
   - **Testing & Deployment:**
     - 51/51 automated unit/integration tests passing (`npm test`). Syntax validated across client and server via `npm run check`.
     - Restarted `sunset-squadron.service` and confirmed HTTP 200 on all endpoints and clean systemd logs.
+- **Procedural Cockpit Canopy Cosmetics Engine (`shared/shop.js`, `public/js/entities.js`, `public/index.html`, `public/style.css`, `public/js/main.js`):**
+  - **Canopy Category & Equipment Sync:** Added `canopy` as a first-class cosmetic category in `SHOP_CATEGORIES` and `DEFAULT_EQUIPPED` (`canopy_default`).
+  - **Procedural Canopy Catalog (6 Styles):**
+    * Standard Aero Bubble (`canopy_default`, 0 CR): factory aerodynamic teardrop glass matching paint finish profile.
+    * Solar Gold Amber (`canopy_amber`, 300 CR): high-contrast polarized solar gold glass with metallic specular brow rim (`0xffb326` tint, 0.88 metalness).
+    * Stealth Chisel (`canopy_stealth`, 500 CR): angular 4-sided chiseled diamond canopy with smoked radar-absorbent obsidian hue (`0x1a1626`) and faceted top spine.
+    * Panoramic Bubble Dome (`canopy_bubble`, 750 CR): blown panoramic teardrop bubble providing seamless 360° visibility with translucent azure glass (`0x40e0d0`) and circular base collar.
+    * Baron Birdcage Greenhouse (`canopy_cage`, 950 CR): retro interceptor greenhouse with 3 metallic arch frame ribs and structural top spine bar over emerald glass (`0x2aff88`).
+    * Cyberpunk Neon HUD (`canopy_holo`, 1400 CR): translucent magenta hard-light canopy (`0xff2a9d`) with floating digital HUD reticle ring and crosshair bracket projected inside the cockpit.
+  - **Hangar UI Integration:**
+    * Added dedicated `Canopy` touch tab in `#hangar-tabs`.
+    * Selecting canopy cosmetics dynamically updates the 3D turntable jet with optimal cockpit camera angle and audio chime.
+    * Added `.canopy-tag` badge on lobby roster cards.
+  - **Automated Tests:** Expanded `test/shop.test.js` to assert the 7 categories and all procedural canopy items and parameters. 51/51 tests pass.
 
 ### Pending / Next Up
 - All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!

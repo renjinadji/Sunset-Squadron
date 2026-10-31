@@ -7,11 +7,12 @@
  * single source of truth for cosmetic parameters, pricing and round sponsors.
  */
 
-const SHOP_CATEGORIES = ['wing', 'finish', 'trail', 'firework', 'voice', 'visor'];
+const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'trail', 'firework', 'voice', 'visor'];
 
 const DEFAULT_EQUIPPED = {
   wing: 'wing_default',
   finish: 'finish_default',
+  canopy: 'canopy_default',
   trail: 'trail_default',
   firework: 'fw_default',
   voice: 'voice_default',
@@ -101,6 +102,62 @@ const SHOP_ITEMS = [
     desc: 'Pure metallic gold hull override with brilliant sparkles.',
     price: 2500,
     params: { type: 'gold', color: 0xffd700, metalness: 0.9, roughness: 0.2, sparkle: true },
+  },
+
+  // --- Canopies ('canopy') ---
+  {
+    id: 'canopy_default',
+    category: 'canopy',
+    name: 'Standard Aero Bubble',
+    desc: 'Factory aerodynamic teardrop cockpit glass.',
+    description: 'Factory aerodynamic teardrop cockpit glass.',
+    price: 0,
+    params: { style: 'default' },
+  },
+  {
+    id: 'canopy_amber',
+    category: 'canopy',
+    name: 'Solar Gold Amber',
+    desc: 'High-contrast polarized solar gold glass with mirror sheen.',
+    description: 'High-contrast polarized solar gold glass with mirror sheen.',
+    price: 300,
+    params: { style: 'amber', tint: 0xffb326, metallic: true },
+  },
+  {
+    id: 'canopy_stealth',
+    category: 'canopy',
+    name: 'Stealth Chisel',
+    desc: 'Angular radar-absorbent faceted glass with smoked obsidian hue.',
+    description: 'Angular radar-absorbent faceted glass with smoked obsidian hue.',
+    price: 500,
+    params: { style: 'stealth', faceted: true, tint: 0x1a1626 },
+  },
+  {
+    id: 'canopy_bubble',
+    category: 'canopy',
+    name: 'Panoramic Bubble Dome',
+    desc: 'Blown panoramic teardrop bubble providing seamless 360 cockpit visibility.',
+    description: 'Blown panoramic teardrop bubble providing seamless 360 cockpit visibility.',
+    price: 750,
+    params: { style: 'bubble', panoramic: true, tint: 0x40e0d0 },
+  },
+  {
+    id: 'canopy_cage',
+    category: 'canopy',
+    name: 'Baron Birdcage Greenhouse',
+    desc: 'Vintage heavy-frame interceptor canopy with metal structural cage ribs.',
+    description: 'Vintage heavy-frame interceptor canopy with metal structural cage ribs.',
+    price: 950,
+    params: { style: 'cage', framed: true, ribs: 3, tint: 0x2aff88 },
+  },
+  {
+    id: 'canopy_holo',
+    category: 'canopy',
+    name: 'Cyberpunk Neon HUD',
+    desc: 'Translucent magenta hard-light canopy with floating digital HUD reticle projection.',
+    description: 'Translucent magenta hard-light canopy with floating digital HUD reticle projection.',
+    price: 1400,
+    params: { style: 'holo', reticle: true, tint: 0xff2a9d, emissiveIntensity: 1.6 },
   },
 
   // --- Contrails ('trail') ---
@@ -286,6 +343,11 @@ function sponsorById(id) {
 
 function isDefaultItem(id) {
   return Object.values(DEFAULT_EQUIPPED).includes(id);
+}
+
+for (const it of SHOP_ITEMS) {
+  if (!it.description) it.description = it.desc;
+  if (!it.desc) it.desc = it.description;
 }
 
 const api = {

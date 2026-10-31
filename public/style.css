@@ -919,6 +919,7 @@ html, body {
 }
 #roster li .wing-tag { border-color: rgba(79, 241, 255, 0.5); color: var(--cyan); }
 #roster li .finish-tag { border-color: rgba(255, 213, 74, 0.5); color: var(--gold); }
+#roster li .canopy-tag { border-color: rgba(255, 120, 220, 0.5); color: #ff85d8; }
 #roster li .sponsor-tag { border-color: #ff5e5b; color: #ff8a88; background: rgba(255, 94, 91, 0.18); }
 
 /* ---------------- RESULTS SKY CREDITS RECEIPT ---------------- */

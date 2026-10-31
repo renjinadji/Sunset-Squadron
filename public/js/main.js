@@ -433,6 +433,15 @@ function renderRoster(lobby) {
         txt.appendChild(fTag);
       }
     }
+    if (equipped && equipped.canopy && equipped.canopy !== 'canopy_default') {
+      const c = itemById(equipped.canopy);
+      if (c) {
+        const cTag = document.createElement('span');
+        cTag.className = 'tag cosmetic-tag canopy-tag';
+        cTag.textContent = c.name.split(' ')[0].toUpperCase();
+        txt.appendChild(cTag);
+      }
+    }
 
     li.appendChild(txt);
     if (p.id === lobby.hostId) {
@@ -886,7 +895,7 @@ function previewItem(item) {
   if (!item) return;
   game.previewingItemId = item.id;
   if (ui.previewItemName) ui.previewItemName.textContent = item.name;
-  if (ui.previewDesc) ui.previewDesc.textContent = item.description;
+  if (ui.previewDesc) ui.previewDesc.textContent = item.description || item.desc || '';
 
   if (item.category === 'sponsors') {
     sound.blip(520, 0.3);
@@ -897,7 +906,11 @@ function previewItem(item) {
   game.previewEquipped[item.category] = item.id;
   updateHangarPreview();
 
-  if (item.category === 'trail') {
+  if (item.category === 'canopy') {
+    turntableYaw = 0.35;
+    turntablePitch = 0.18;
+    sound.blip(640, 0.25);
+  } else if (item.category === 'trail') {
     previewBoostTimer = 3.0;
   } else if (item.category === 'firework') {
     if (turntableParticles) {
@@ -1011,7 +1024,7 @@ function renderHangarGrid() {
         <span class="card-name">${escapeHtml(item.name)}</span>
         ${priceHtml}
       </div>
-      <div class="card-desc">${escapeHtml(item.description)}</div>
+      <div class="card-desc">${escapeHtml(item.description || item.desc || '')}</div>
       <div class="card-action">${btnHtml}</div>
     `;
 
@@ -1114,7 +1127,7 @@ function openHangar(initialTab = 'wing') {
   const curItem = itemById(game.previewingItemId);
   if (curItem) {
     if (ui.previewItemName) ui.previewItemName.textContent = curItem.name;
-    if (ui.previewDesc) ui.previewDesc.textContent = curItem.description;
+    if (ui.previewDesc) ui.previewDesc.textContent = curItem.description || curItem.desc || '';
   }
 }
 

@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const shop = require('../shared/shop');
 
 test('shared/shop defines categories and default equipped mapping', () => {
-  assert.deepStrictEqual(shop.SHOP_CATEGORIES, ['wing', 'finish', 'trail', 'firework', 'voice', 'visor']);
+  assert.deepStrictEqual(shop.SHOP_CATEGORIES, ['wing', 'finish', 'canopy', 'trail', 'firework', 'voice', 'visor']);
   assert.strictEqual(typeof shop.DEFAULT_EQUIPPED, 'object');
   for (const cat of shop.SHOP_CATEGORIES) {
     const defId = shop.DEFAULT_EQUIPPED[cat];
@@ -51,7 +51,7 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
   const tmp = path.join(os.tmpdir(), `shop-esm-${process.pid}.mjs`);
   fs.writeFileSync(tmp, src);
   const mod = await import(tmp);
-  assert.strictEqual(mod.SHOP_CATEGORIES.length, 6);
+  assert.strictEqual(mod.SHOP_CATEGORIES.length, 7);
   assert.strictEqual(typeof mod.itemById, 'function');
   assert.strictEqual(typeof mod.itemsByCategory, 'function');
   assert.strictEqual(typeof mod.sponsorById, 'function');
@@ -59,10 +59,11 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
   fs.unlinkSync(tmp);
 });
 
-test('procedural cosmetics catalog covers all Phase 3 cosmetic styles across 6 categories', () => {
+test('procedural cosmetics catalog covers all cosmetic styles across 7 categories including canopy', () => {
   const expectedKits = {
     wing: ['wing_default', 'wing_xwing', 'wing_triplane', 'wing_twinboom', 'wing_saucer'],
     finish: ['finish_default', 'finish_chrome', 'finish_synth', 'finish_holo', 'finish_gold'],
+    canopy: ['canopy_default', 'canopy_amber', 'canopy_stealth', 'canopy_bubble', 'canopy_cage', 'canopy_holo'],
     trail: ['trail_default', 'trail_voxel', 'trail_rings', 'trail_rainbow', 'trail_lightning'],
     firework: ['fw_default', 'fw_saturn', 'fw_spiral', 'fw_hearts'],
     voice: ['voice_default', 'voice_chiptune', 'voice_dreadnought', 'voice_sonar'],
@@ -90,4 +91,20 @@ test('procedural cosmetics catalog covers all Phase 3 cosmetic styles across 6 c
   const holo = shop.itemById('finish_holo');
   assert.strictEqual(holo.params.transparent, true);
   assert.strictEqual(holo.params.opacity, 0.72);
+
+  const amber = shop.itemById('canopy_amber');
+  assert.strictEqual(amber.params.tint, 0xffb326);
+  assert.strictEqual(amber.params.metallic, true);
+
+  const stealth = shop.itemById('canopy_stealth');
+  assert.strictEqual(stealth.params.faceted, true);
+
+  const bubble = shop.itemById('canopy_bubble');
+  assert.strictEqual(bubble.params.panoramic, true);
+
+  const cage = shop.itemById('canopy_cage');
+  assert.strictEqual(cage.params.ribs, 3);
+
+  const holoCanopy = shop.itemById('canopy_holo');
+  assert.strictEqual(holoCanopy.params.reticle, true);
 });

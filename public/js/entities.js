@@ -157,6 +157,7 @@ export class Jet {
 
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
+    const canopyChoice = (this.equipped && this.equipped.canopy) || 'canopy_default';
     const pilot = this.pilot;
 
     // Materials based on finish
@@ -317,6 +318,58 @@ export class Jet {
       });
     }
 
+    // Canopy cosmetic material override
+    if (canopyChoice === 'canopy_amber') {
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0xffb326,
+        emissive: 0xcc6600,
+        emissiveIntensity: 0.65,
+        roughness: 0.08,
+        metalness: 0.88,
+        flatShading: true,
+      });
+    } else if (canopyChoice === 'canopy_stealth') {
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1626,
+        emissive: 0x483266,
+        emissiveIntensity: 0.45,
+        roughness: 0.2,
+        metalness: 0.75,
+        flatShading: true,
+      });
+    } else if (canopyChoice === 'canopy_bubble') {
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0x40e0d0,
+        emissive: 0x128899,
+        emissiveIntensity: 0.55,
+        roughness: 0.06,
+        metalness: 0.45,
+        transparent: true,
+        opacity: 0.82,
+        flatShading: true,
+      });
+    } else if (canopyChoice === 'canopy_cage') {
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0x2aff88,
+        emissive: 0x0a6630,
+        emissiveIntensity: 0.5,
+        roughness: 0.15,
+        metalness: 0.65,
+        flatShading: true,
+      });
+    } else if (canopyChoice === 'canopy_holo') {
+      canopyMat = new THREE.MeshStandardMaterial({
+        color: 0xff2a9d,
+        emissive: 0xff1088,
+        emissiveIntensity: 1.5,
+        roughness: 0.1,
+        metalness: 0.3,
+        transparent: true,
+        opacity: 0.85,
+        flatShading: true,
+      });
+    }
+
     this.burnerMat = new THREE.MeshStandardMaterial({
       color: 0xffb060,
       emissive: 0xff9a2a,
@@ -366,12 +419,129 @@ export class Jet {
     tailCone.position.z = 4.1;
     airframeParts.push(tailCone);
 
-    const canopy = new THREE.Mesh(geo('canopy', () => {
-      const g = new THREE.SphereGeometry(0.9, 8, 6);
-      g.scale(0.8, 0.8, 1.8);
-      return g;
-    }), canopyMat);
-    canopy.position.set(0, 0.85, -1.4);
+    if (canopyChoice === 'canopy_stealth') {
+      const stealthCanopy = new THREE.Mesh(geo('canopy_stealth_mesh', () => {
+        const g = new THREE.CylinderGeometry(0.18, 0.92, 3.2, 4);
+        g.rotateX(-Math.PI / 2);
+        g.scale(1.05, 0.72, 1.0);
+        return g;
+      }), canopyMat);
+      stealthCanopy.position.set(0, 0.82, -1.4);
+      airframeParts.push(stealthCanopy);
+
+      const stealthRidge = new THREE.Mesh(geo('canopy_stealth_ridge', () => {
+        const g = new THREE.BoxGeometry(0.06, 0.12, 3.1);
+        return g;
+      }), darkMat);
+      stealthRidge.position.set(0, 1.28, -1.4);
+      airframeParts.push(stealthRidge);
+    } else if (canopyChoice === 'canopy_bubble') {
+      const bubbleCanopy = new THREE.Mesh(geo('canopy_bubble_mesh', () => {
+        const g = new THREE.SphereGeometry(1.06, 10, 8);
+        g.scale(0.95, 0.95, 1.5);
+        return g;
+      }), canopyMat);
+      bubbleCanopy.position.set(0, 0.96, -1.4);
+      airframeParts.push(bubbleCanopy);
+
+      const bubbleCollar = new THREE.Mesh(geo('canopy_bubble_collar', () => {
+        const g = new THREE.TorusGeometry(1.0, 0.05, 4, 16);
+        g.rotateX(Math.PI / 2);
+        g.scale(0.95, 1.48, 1.0);
+        return g;
+      }), darkMat);
+      bubbleCollar.position.set(0, 0.65, -1.4);
+      airframeParts.push(bubbleCollar);
+    } else if (canopyChoice === 'canopy_cage') {
+      const cageGlass = new THREE.Mesh(geo('canopy_cage_glass', () => {
+        const g = new THREE.SphereGeometry(0.9, 8, 6);
+        g.scale(0.8, 0.85, 1.8);
+        return g;
+      }), canopyMat);
+      cageGlass.position.set(0, 0.85, -1.4);
+      airframeParts.push(cageGlass);
+
+      const ribZ = [-0.65, -1.4, -2.15];
+      for (let ri = 0; ri < ribZ.length; ri++) {
+        const rib = new THREE.Mesh(geo(`canopy_cage_rib_${ri}`, () => {
+          const g = new THREE.TorusGeometry(0.78, 0.055, 4, 10, Math.PI);
+          return g;
+        }), darkMat);
+        rib.position.set(0, 0.72, ribZ[ri]);
+        airframeParts.push(rib);
+      }
+
+      const cageSpine = new THREE.Mesh(geo('canopy_cage_spine', () => {
+        const g = new THREE.BoxGeometry(0.08, 0.08, 2.7);
+        return g;
+      }), darkMat);
+      cageSpine.position.set(0, 1.54, -1.4);
+      airframeParts.push(cageSpine);
+    } else if (canopyChoice === 'canopy_holo') {
+      const holoGlass = new THREE.Mesh(geo('canopy_holo_glass', () => {
+        const g = new THREE.SphereGeometry(0.9, 8, 6);
+        g.scale(0.8, 0.8, 1.8);
+        return g;
+      }), canopyMat);
+      holoGlass.position.set(0, 0.85, -1.4);
+      airframeParts.push(holoGlass);
+
+      const hudReticleMat = new THREE.MeshStandardMaterial({
+        color: 0x4ff1ff,
+        emissive: 0x4ff1ff,
+        emissiveIntensity: 2.8,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      this._disposables.push(hudReticleMat);
+
+      const hudRing = new THREE.Mesh(geo('canopy_hud_ring', () => {
+        const g = new THREE.TorusGeometry(0.26, 0.025, 4, 12);
+        return g;
+      }), hudReticleMat);
+      hudRing.position.set(0, 0.92, -2.15);
+      airframeParts.push(hudRing);
+
+      const hudCross = new THREE.Mesh(geo('canopy_hud_cross', () => {
+        const g = new THREE.BoxGeometry(0.42, 0.02, 0.02);
+        return g;
+      }), hudReticleMat);
+      hudCross.position.set(0, 0.92, -2.15);
+      airframeParts.push(hudCross);
+    } else if (canopyChoice === 'canopy_amber') {
+      const amberCanopy = new THREE.Mesh(geo('canopy_amber_glass', () => {
+        const g = new THREE.SphereGeometry(0.92, 8, 6);
+        g.scale(0.82, 0.78, 1.9);
+        return g;
+      }), canopyMat);
+      amberCanopy.position.set(0, 0.82, -1.4);
+      airframeParts.push(amberCanopy);
+
+      const browMat = new THREE.MeshStandardMaterial({
+        color: 0xffd54a,
+        emissive: 0xaa7700,
+        emissiveIntensity: 0.6,
+        metalness: 0.9,
+        roughness: 0.2,
+      });
+      this._disposables.push(browMat);
+
+      const amberBrow = new THREE.Mesh(geo('canopy_amber_brow', () => {
+        const g = new THREE.TorusGeometry(0.72, 0.045, 4, 12, Math.PI);
+        return g;
+      }), browMat);
+      amberBrow.position.set(0, 0.68, -2.2);
+      airframeParts.push(amberBrow);
+    } else {
+      const canopy = new THREE.Mesh(geo('canopy', () => {
+        const g = new THREE.SphereGeometry(0.9, 8, 6);
+        g.scale(0.8, 0.8, 1.8);
+        return g;
+      }), canopyMat);
+      canopy.position.set(0, 0.85, -1.4);
+      airframeParts.push(canopy);
+    }
     airframeParts.push(canopy);
 
     this.burner = new THREE.Mesh(geo('burner', () => {
