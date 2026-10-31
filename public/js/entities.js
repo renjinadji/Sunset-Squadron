@@ -2146,10 +2146,16 @@ export class Jet {
     // F-14 Tomcat Swing Wings: Dynamic Variable Sweep
     if (this.swingWings) {
       const isFullSpeed = Boolean(info.boost || info.super || (fx && fx.turbo));
-      const targetSweep = isFullSpeed ? 0.76 : 0.0;
+      let sweepRatio = isFullSpeed ? 1.0 : 0.0;
+      if (typeof info.speed === 'number' && Number.isFinite(info.speed)) {
+        const speedRatio = Math.max(0, Math.min(1, (info.speed - 48) / (85 - 48)));
+        sweepRatio = Math.max(sweepRatio, speedRatio);
+      }
+      const maxSweep = 1.25; // ~72° fully swept backward at supersonic speed
+      const targetSweep = sweepRatio * maxSweep;
       this.currentSweep = THREE.MathUtils.lerp(this.currentSweep || 0, targetSweep, Math.min(1, dt * 7.0));
-      this.swingWings.groupL.rotation.y = -this.currentSweep;
-      this.swingWings.groupR.rotation.y = this.currentSweep;
+      this.swingWings.groupL.rotation.y = this.currentSweep;
+      this.swingWings.groupR.rotation.y = -this.currentSweep;
 
       const cosS = Math.cos(this.currentSweep);
       const sinS = Math.sin(this.currentSweep);

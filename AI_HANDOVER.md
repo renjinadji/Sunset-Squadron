@@ -1008,6 +1008,11 @@
     * Selecting tail cosmetics automatically re-orients the 3D turntable camera to a rear 3/4 high angle (`turntableYaw = 2.15, turntablePitch = 0.35`) and plays an audio blip.
     * Added `.tail-tag` badge for lobby roster cards.
   - **Automated Tests:** Updated `test/shop.test.js` asserting all 11 categories and procedural tail parameters. All 51 tests pass.
+- **F-14 Tomcat Variable Sweep Kinematics Fix (`public/js/entities.js`, `public/js/main.js`):**
+  - **Rotation Direction & Angle Correction:** Inverted group rotation signs (`groupL.rotation.y = this.currentSweep`, `groupR.rotation.y = -this.currentSweep`) so the wings sweep backward toward the tail and afterburner rather than forward.
+  - **Full Backward Sweep:** Increased maximum supersonic sweep angle `maxSweep` to `1.25 rad` (~72°), smoothly tucking the wing panels flush alongside the aft fuselage and engine nacelles at full speed.
+  - **Smooth Proportional Speed Kinematics:** Integrated smooth speed scaling from cruise (`SPEED_BASE = 48`) to supersonic boost (`SPEED_BOOST = 85`), ensuring wings sweep back continuously when accelerating or boosting in-game and in the Hangar shop preview.
+  - **Synchronized Wingtip Trailing FX:** `wingTipL` and `wingTipR` analytical coordinates track the swept wingtip positions identically with Three.js world transforms down to the millimeter, keeping wingtip lights and electric lightning contrail arcs perfectly attached during sweep.
 
 ### Pending / Next Up
 - All 11 cosmetic categories in the Sky Credits & Procedural Cosmetic Shop engine are complete!

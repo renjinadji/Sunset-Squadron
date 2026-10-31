@@ -2394,7 +2394,7 @@ function stepLocalFlight(dt) {
   me.jet.group.position.copy(me.pos);
   me.jet.group.quaternion.copy(me.quat);
   if (me.tumble > 0) me.tumble = Math.max(0, me.tumble - dt);
-  me.jet.updateVisual(dt, { boost, super: sup, invuln: me.invuln, tumble: me.tumble, fx: activeFx() }, gfx.particles, t);
+  me.jet.updateVisual(dt, { boost, super: sup, invuln: me.invuln, tumble: me.tumble, fx: activeFx(), speed: me.speed }, gfx.particles, t);
 
   // Fire
   let cd = sup ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
@@ -2619,7 +2619,7 @@ function stepRemote(dt) {
     r.jet.group.position.lerp(tmpV, LERP);
     r.jet.group.quaternion.slerp(r.quat, LERP);
     if (r.tumble > 0) r.tumble = Math.max(0, r.tumble - dt);
-    r.jet.updateVisual(dt, { boost: r.info.boost, super: r.info.super, invuln: r.info.invuln, tumble: r.tumble, fx: r.info.fx }, gfx.particles, t);
+    r.jet.updateVisual(dt, { boost: r.info.boost, super: r.info.super, invuln: r.info.invuln, tumble: r.tumble, fx: r.info.fx, speed: r.spd }, gfx.particles, t);
   }
   for (const r of rockets.values()) {
     const age = Math.min(0.2, t - r.lastAt);
