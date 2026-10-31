@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const shop = require('../shared/shop');
 
 test('shared/shop defines categories and default equipped mapping', () => {
-  assert.deepStrictEqual(shop.SHOP_CATEGORIES, ['wing', 'finish', 'canopy', 'trail', 'firework', 'voice', 'visor']);
+  assert.deepStrictEqual(shop.SHOP_CATEGORIES, ['wing', 'finish', 'canopy', 'intake', 'trail', 'firework', 'voice', 'visor']);
   assert.strictEqual(typeof shop.DEFAULT_EQUIPPED, 'object');
   for (const cat of shop.SHOP_CATEGORIES) {
     const defId = shop.DEFAULT_EQUIPPED[cat];
@@ -51,7 +51,7 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
   const tmp = path.join(os.tmpdir(), `shop-esm-${process.pid}.mjs`);
   fs.writeFileSync(tmp, src);
   const mod = await import(tmp);
-  assert.strictEqual(mod.SHOP_CATEGORIES.length, 7);
+  assert.strictEqual(mod.SHOP_CATEGORIES.length, 8);
   assert.strictEqual(typeof mod.itemById, 'function');
   assert.strictEqual(typeof mod.itemsByCategory, 'function');
   assert.strictEqual(typeof mod.sponsorById, 'function');
@@ -59,11 +59,12 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
   fs.unlinkSync(tmp);
 });
 
-test('procedural cosmetics catalog covers all cosmetic styles across 7 categories including canopy', () => {
+test('procedural cosmetics catalog covers all cosmetic styles across 8 categories including canopy and intake', () => {
   const expectedKits = {
     wing: ['wing_default', 'wing_xwing', 'wing_triplane', 'wing_twinboom', 'wing_saucer'],
     finish: ['finish_default', 'finish_chrome', 'finish_synth', 'finish_holo', 'finish_gold'],
     canopy: ['canopy_default', 'canopy_amber', 'canopy_stealth', 'canopy_bubble', 'canopy_cage', 'canopy_holo'],
+    intake: ['intake_default', 'intake_ramjet', 'intake_viper', 'intake_splitters', 'intake_turbine', 'intake_plasma'],
     trail: ['trail_default', 'trail_voxel', 'trail_rings', 'trail_rainbow', 'trail_lightning'],
     firework: ['fw_default', 'fw_saturn', 'fw_spiral', 'fw_hearts'],
     voice: ['voice_default', 'voice_chiptune', 'voice_dreadnought', 'voice_sonar'],
@@ -107,4 +108,16 @@ test('procedural cosmetics catalog covers all cosmetic styles across 7 categorie
 
   const holoCanopy = shop.itemById('canopy_holo');
   assert.strictEqual(holoCanopy.params.reticle, true);
+
+  const ramjet = shop.itemById('intake_ramjet');
+  assert.strictEqual(ramjet.params.spikes, true);
+
+  const viper = shop.itemById('intake_viper');
+  assert.strictEqual(viper.params.ventral, true);
+
+  const turbine = shop.itemById('intake_turbine');
+  assert.strictEqual(turbine.params.blades, 12);
+
+  const plasma = shop.itemById('intake_plasma');
+  assert.strictEqual(plasma.params.ionRings, true);
 });

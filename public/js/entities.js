@@ -158,6 +158,7 @@ export class Jet {
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
     const canopyChoice = (this.equipped && this.equipped.canopy) || 'canopy_default';
+    const intakeChoice = (this.equipped && this.equipped.intake) || 'intake_default';
     const pilot = this.pilot;
 
     // Materials based on finish
@@ -550,6 +551,204 @@ export class Jet {
     }), this.burnerMat);
     this.burner.position.z = 5.6;
     airframeParts.push(this.burner);
+
+    // Engine Air Intakes
+    if (intakeChoice === 'intake_ramjet') {
+      // SR-71 Supersonic Conical Shock-Spike Nacelles
+      for (const sx of [-1.45, 1.45]) {
+        const nacelle = new THREE.Mesh(geo('intake_ramjet_cowl', () => {
+          const g = new THREE.CylinderGeometry(0.48, 0.54, 2.5, 8);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), bodyMat);
+        nacelle.position.set(sx, 0.05, -0.5);
+        airframeParts.push(nacelle);
+
+        const mouth = new THREE.Mesh(geo('intake_ramjet_mouth', () => {
+          const g = new THREE.CylinderGeometry(0.38, 0.38, 0.25, 8);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), darkMat);
+        mouth.position.set(sx, 0.05, -1.74);
+        airframeParts.push(mouth);
+
+        const spike = new THREE.Mesh(geo('intake_ramjet_spike', () => {
+          const g = new THREE.ConeGeometry(0.24, 1.35, 8);
+          g.rotateX(-Math.PI / 2);
+          return g;
+        }), darkMat);
+        spike.position.set(sx, 0.05, -2.15);
+        airframeParts.push(spike);
+      }
+    } else if (intakeChoice === 'intake_viper') {
+      // Viper Wide Ventral Belly Scoop with Chin Splitter Shelf
+      const ventralDuct = new THREE.Mesh(geo('intake_viper_duct', () => {
+        const g = new THREE.BoxGeometry(1.55, 0.75, 2.8);
+        return g;
+      }), bodyMat);
+      ventralDuct.position.set(0, -0.85, -0.9);
+      airframeParts.push(ventralDuct);
+
+      const ventralMouth = new THREE.Mesh(geo('intake_viper_mouth', () => {
+        const g = new THREE.BoxGeometry(1.38, 0.58, 0.25);
+        return g;
+      }), darkMat);
+      ventralMouth.position.set(0, -0.85, -2.3);
+      airframeParts.push(ventralMouth);
+
+      const ventralSplitter = new THREE.Mesh(geo('intake_viper_splitter', () => {
+        const g = new THREE.BoxGeometry(0.12, 0.65, 0.35);
+        return g;
+      }), darkMat);
+      ventralSplitter.position.set(0, -0.85, -2.3);
+      airframeParts.push(ventralSplitter);
+
+      const chinShelf = new THREE.Mesh(geo('intake_viper_shelf', () => {
+        const g = new THREE.BoxGeometry(1.4, 0.1, 1.8);
+        return g;
+      }), darkMat);
+      chinShelf.position.set(0, -0.46, -1.8);
+      airframeParts.push(chinShelf);
+    } else if (intakeChoice === 'intake_splitters') {
+      // Flanker Canted DSI Bumpers with Boundary Layer Splitter Plates
+      for (const sx of [-1.4, 1.4]) {
+        const sign = sx > 0 ? 1 : -1;
+        const box = new THREE.Mesh(geo('intake_dsi_box', () => {
+          const g = new THREE.BoxGeometry(0.72, 0.75, 2.6);
+          return g;
+        }), bodyMat);
+        box.position.set(sx, -0.12, -0.5);
+        box.rotation.z = -sign * 0.16;
+        airframeParts.push(box);
+
+        const mouth = new THREE.Mesh(geo('intake_dsi_mouth', () => {
+          const g = new THREE.BoxGeometry(0.58, 0.6, 0.25);
+          return g;
+        }), darkMat);
+        mouth.position.set(sx, -0.12, -1.8);
+        mouth.rotation.z = -sign * 0.16;
+        airframeParts.push(mouth);
+
+        const splitter = new THREE.Mesh(geo('intake_dsi_splitter', () => {
+          const g = new THREE.BoxGeometry(0.08, 0.92, 2.2);
+          return g;
+        }), darkMat);
+        splitter.position.set(sx - sign * 0.44, -0.08, -1.1);
+        airframeParts.push(splitter);
+      }
+    } else if (intakeChoice === 'intake_turbine') {
+      // Titanium Fan Turbines with Visible Spinning Blades
+      const fanMat = new THREE.MeshStandardMaterial({
+        color: 0xd8d8d8,
+        metalness: 0.95,
+        roughness: 0.15,
+        flatShading: true,
+      });
+      const coneMat = new THREE.MeshStandardMaterial({
+        color: 0xffd54a,
+        emissive: 0x996600,
+        emissiveIntensity: 0.5,
+        metalness: 0.9,
+        roughness: 0.2,
+      });
+      this._disposables.push(fanMat, coneMat);
+
+      for (const sx of [-1.45, 1.45]) {
+        const cowl = new THREE.Mesh(geo('intake_turbine_cowl', () => {
+          const g = new THREE.CylinderGeometry(0.54, 0.56, 2.4, 10);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), bodyMat);
+        cowl.position.set(sx, 0.05, -0.5);
+        airframeParts.push(cowl);
+
+        const mouth = new THREE.Mesh(geo('intake_turbine_mouth', () => {
+          const g = new THREE.CylinderGeometry(0.46, 0.46, 0.2, 10);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), darkMat);
+        mouth.position.set(sx, 0.05, -1.7);
+        airframeParts.push(mouth);
+
+        const fanDisk = new THREE.Mesh(geo('intake_turbine_disk', () => {
+          const g = new THREE.CylinderGeometry(0.42, 0.42, 0.08, 12);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), fanMat);
+        fanDisk.position.set(sx, 0.05, -1.54);
+        airframeParts.push(fanDisk);
+
+        const noseCone = new THREE.Mesh(geo('intake_turbine_cone', () => {
+          const g = new THREE.ConeGeometry(0.12, 0.35, 8);
+          g.rotateX(-Math.PI / 2);
+          return g;
+        }), coneMat);
+        noseCone.position.set(sx, 0.05, -1.68);
+        airframeParts.push(noseCone);
+      }
+    } else if (intakeChoice === 'intake_plasma') {
+      // Quantum Plasma Ram-Scoops with Glowing Ion Rings
+      const plasmaMat = new THREE.MeshStandardMaterial({
+        color: 0x4ff1ff,
+        emissive: 0x4ff1ff,
+        emissiveIntensity: 2.8,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      this._disposables.push(plasmaMat);
+
+      for (const sx of [-1.4, 1.4]) {
+        const cowl = new THREE.Mesh(geo('intake_plasma_cowl', () => {
+          const g = new THREE.BoxGeometry(0.68, 0.65, 2.5);
+          return g;
+        }), bodyMat);
+        cowl.position.set(sx, 0.05, -0.5);
+        airframeParts.push(cowl);
+
+        const core = new THREE.Mesh(geo('intake_plasma_core', () => {
+          const g = new THREE.BoxGeometry(0.52, 0.5, 0.2);
+          return g;
+        }), darkMat);
+        core.position.set(sx, 0.05, -1.75);
+        airframeParts.push(core);
+
+        const ionRing = new THREE.Mesh(geo('intake_plasma_ring', () => {
+          const g = new THREE.TorusGeometry(0.36, 0.045, 6, 16);
+          return g;
+        }), plasmaMat);
+        ionRing.position.set(sx, 0.05, -1.9);
+        airframeParts.push(ionRing);
+      }
+    } else {
+      // intake_default: Classic Twin Lateral Wedge Scoops
+      for (const sx of [-1.35, 1.35]) {
+        const sign = sx > 0 ? 1 : -1;
+        const duct = new THREE.Mesh(geo('intake_wedge_duct', () => {
+          const g = new THREE.BoxGeometry(0.65, 0.7, 2.4);
+          return g;
+        }), bodyMat);
+        duct.position.set(sx, 0.05, -0.6);
+        duct.rotation.z = -sign * 0.06;
+        airframeParts.push(duct);
+
+        const mouth = new THREE.Mesh(geo('intake_wedge_mouth', () => {
+          const g = new THREE.BoxGeometry(0.52, 0.56, 0.2);
+          return g;
+        }), darkMat);
+        mouth.position.set(sx, 0.05, -1.8);
+        mouth.rotation.z = -sign * 0.06;
+        airframeParts.push(mouth);
+
+        const lip = new THREE.Mesh(geo('intake_wedge_lip', () => {
+          const g = new THREE.BoxGeometry(0.67, 0.1, 0.35);
+          return g;
+        }), darkMat);
+        lip.position.set(sx, 0.4, -1.75);
+        lip.rotation.z = -sign * 0.06;
+        airframeParts.push(lip);
+      }
+    }
 
     // Tip lights helper
     const makeTip = (pos) => {

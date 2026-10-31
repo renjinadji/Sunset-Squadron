@@ -927,6 +927,20 @@
     * Selecting canopy cosmetics dynamically updates the 3D turntable jet with optimal cockpit camera angle and audio chime.
     * Added `.canopy-tag` badge on lobby roster cards.
   - **Automated Tests:** Expanded `test/shop.test.js` to assert the 7 categories and all procedural canopy items and parameters. 51/51 tests pass.
+- **Procedural Engine Air Intakes Engine (`shared/shop.js`, `public/js/entities.js`, `public/index.html`, `public/style.css`, `public/js/main.js`):**
+  - **Intake Category & Equipment Sync:** Added `intake` as the 8th cosmetic category in `SHOP_CATEGORIES` and `DEFAULT_EQUIPPED` (`intake_default`).
+  - **Procedural Intake Catalog (6 Styles):**
+    * Twin Wedge Scoops (`intake_default`, 0 CR): classic lateral rectangular wedge air scoops with angled compression ramps and dark throat cavities.
+    * SR-71 Conical Spikes (`intake_ramjet`, 350 CR): supersonic circular nacelle cowls with protruding titanium shock cones.
+    * Viper Ventral Scoop (`intake_viper`, 550 CR): wide ventral belly scoop mounted beneath the fuselage with aerodynamic chin splitter shelf.
+    * Flanker DSI Bumpers (`intake_splitters`, 800 CR): canted diverterless supersonic intake boxes with razor splitter boundary plates.
+    * Titanium Fan Turbines (`intake_turbine`, 1100 CR): high-bypass circular turbojet ducts exposing visible spinning multi-blade turbine disks and golden nose cones.
+    * Quantum Plasma Ram-Scoops (`intake_plasma`, 1500 CR): sci-fi magnetic induction scoops with high-intensity glowing cyan plasma ion rings hovering at the intake mouths.
+  - **Hangar UI Integration:**
+    * Added dedicated `Intakes` touch tab in `#hangar-tabs`.
+    * Selecting intake cosmetics dynamically updates the 3D turntable jet with optimal flank angle (`turntableYaw = 0.72, turntablePitch = 0.12`) and audio blip.
+    * Added `.intake-tag` badge on lobby roster cards.
+  - **Automated Tests:** Expanded `test/shop.test.js` asserting all 8 categories and procedural intake parameters. 51/51 tests pass.
 
 ### Pending / Next Up
 - All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!

@@ -7,12 +7,13 @@
  * single source of truth for cosmetic parameters, pricing and round sponsors.
  */
 
-const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'trail', 'firework', 'voice', 'visor'];
+const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'intake', 'trail', 'firework', 'voice', 'visor'];
 
 const DEFAULT_EQUIPPED = {
   wing: 'wing_default',
   finish: 'finish_default',
   canopy: 'canopy_default',
+  intake: 'intake_default',
   trail: 'trail_default',
   firework: 'fw_default',
   voice: 'voice_default',
@@ -158,6 +159,62 @@ const SHOP_ITEMS = [
     description: 'Translucent magenta hard-light canopy with floating digital HUD reticle projection.',
     price: 1400,
     params: { style: 'holo', reticle: true, tint: 0xff2a9d, emissiveIntensity: 1.6 },
+  },
+
+  // --- Engine Intakes ('intake') ---
+  {
+    id: 'intake_default',
+    category: 'intake',
+    name: 'Twin Wedge Scoops',
+    desc: 'Classic lateral rectangular wedge air scoops with angled compression ramps.',
+    description: 'Classic lateral rectangular wedge air scoops with angled compression ramps.',
+    price: 0,
+    params: { style: 'wedge' },
+  },
+  {
+    id: 'intake_ramjet',
+    category: 'intake',
+    name: 'SR-71 Conical Spikes',
+    desc: 'Supersonic circular nacelle cowls with protruding titanium shock cones.',
+    description: 'Supersonic circular nacelle cowls with protruding titanium shock cones.',
+    price: 350,
+    params: { style: 'ramjet', spikes: true },
+  },
+  {
+    id: 'intake_viper',
+    category: 'intake',
+    name: 'Viper Ventral Scoop',
+    desc: 'Wide ventral belly scoop mounted beneath the fuselage with chin splitter shelf.',
+    description: 'Wide ventral belly scoop mounted beneath the fuselage with chin splitter shelf.',
+    price: 550,
+    params: { style: 'viper', ventral: true },
+  },
+  {
+    id: 'intake_splitters',
+    category: 'intake',
+    name: 'Flanker DSI Bumpers',
+    desc: 'Canted diverterless supersonic intake boxes with razor splitter boundary plates.',
+    description: 'Canted diverterless supersonic intake boxes with razor splitter boundary plates.',
+    price: 800,
+    params: { style: 'dsi', splitters: true },
+  },
+  {
+    id: 'intake_turbine',
+    category: 'intake',
+    name: 'Titanium Fan Turbines',
+    desc: 'High-bypass circular turbojet ducts exposing visible spinning multi-blade turbine disks.',
+    description: 'High-bypass circular turbojet ducts exposing visible spinning multi-blade turbine disks.',
+    price: 1100,
+    params: { style: 'turbine', blades: 12 },
+  },
+  {
+    id: 'intake_plasma',
+    category: 'intake',
+    name: 'Quantum Plasma Ram-Scoops',
+    desc: 'Sci-fi magnetic induction scoops with high-intensity glowing cyan plasma ion rings.',
+    description: 'Sci-fi magnetic induction scoops with high-intensity glowing cyan plasma ion rings.',
+    price: 1500,
+    params: { style: 'plasma', ionRings: true, color: 0x4ff1ff },
   },
 
   // --- Contrails ('trail') ---

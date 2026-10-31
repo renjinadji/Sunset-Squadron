@@ -442,6 +442,15 @@ function renderRoster(lobby) {
         txt.appendChild(cTag);
       }
     }
+    if (equipped && equipped.intake && equipped.intake !== 'intake_default') {
+      const itk = itemById(equipped.intake);
+      if (itk) {
+        const itkTag = document.createElement('span');
+        itkTag.className = 'tag cosmetic-tag intake-tag';
+        itkTag.textContent = itk.name.split(' ')[0].toUpperCase();
+        txt.appendChild(itkTag);
+      }
+    }
 
     li.appendChild(txt);
     if (p.id === lobby.hostId) {
@@ -910,6 +919,10 @@ function previewItem(item) {
     turntableYaw = 0.35;
     turntablePitch = 0.18;
     sound.blip(640, 0.25);
+  } else if (item.category === 'intake') {
+    turntableYaw = 0.72;
+    turntablePitch = 0.12;
+    sound.blip(560, 0.25);
   } else if (item.category === 'trail') {
     previewBoostTimer = 3.0;
   } else if (item.category === 'firework') {
