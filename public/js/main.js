@@ -933,7 +933,14 @@ function previewItem(item) {
   game.previewEquipped[item.category] = item.id;
   updateHangarPreview();
 
-  if (item.category === 'fuselage') {
+  if (item.category === 'wing') {
+    turntableYaw = 0.42;
+    turntablePitch = 0.32;
+    if (item.id === 'wing_f14') {
+      previewBoostTimer = 3.5;
+    }
+    sound.blip(620, 0.25);
+  } else if (item.category === 'fuselage') {
     turntableYaw = 0.58;
     turntablePitch = 0.22;
     sound.blip(600, 0.25);

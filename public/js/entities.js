@@ -156,6 +156,7 @@ export class Jet {
     this.synthOverlay = null;
     this.warpRings = null;
     this.cyberSpine = null;
+    this.swingWings = null;
 
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
@@ -1512,6 +1513,330 @@ export class Jet {
       this.wingTipR.set(5.8, -0.1, -0.4);
       airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
 
+    } else if (wing === 'wing_eurofighter') {
+      // Eurofighter Typhoon: Cropped Delta + Foreplane Canards + Tall Fin with ECM Pod
+      const euroWing = new THREE.Mesh(geo('wing_euro_main', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.6);
+        shape.lineTo(6.4, 2.4);
+        shape.lineTo(6.4, 3.4);
+        shape.lineTo(0, 3.4);
+        shape.lineTo(-6.4, 3.4);
+        shape.lineTo(-6.4, 2.4);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.15, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(euroWing);
+
+      // Tip pods / ECM missile rails
+      const podGeo = geo('wing_euro_tip_pod', () => {
+        const g = new THREE.CylinderGeometry(0.12, 0.12, 1.4, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-6.4, 6.4]) {
+        const pod = new THREE.Mesh(podGeo, darkMat);
+        pod.position.set(sx, -0.15, 2.9);
+        airframeParts.push(pod);
+      }
+
+      // Foreplane All-Moving Canards ahead of cockpit
+      const euroCanard = new THREE.Mesh(geo('wing_euro_canards', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0.7);
+        shape.lineTo(2.4, 1.25);
+        shape.lineTo(0, 0.7);
+        shape.lineTo(-2.4, 1.25);
+        shape.lineTo(-2.4, 0.7);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.25, -2.8);
+        return g;
+      }), wingMat);
+      airframeParts.push(euroCanard);
+
+      // Tall Typhoon Vertical Fin with top ECM pod
+      const vfin = new THREE.Mesh(geo('wing_euro_vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0);
+        shape.lineTo(1.8, 2.9);
+        shape.lineTo(0.9, 2.9);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        g.translate(0.14, 0.6, 1.4);
+        return g;
+      }), bodyMat);
+      airframeParts.push(vfin);
+
+      const finPod = new THREE.Mesh(geo('wing_euro_fin_pod', () => {
+        const g = new THREE.CylinderGeometry(0.12, 0.1, 1.2, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      finPod.position.set(0, 3.5, 2.5);
+      airframeParts.push(finPod);
+
+      this.wingTipL.set(-6.4, -0.15, 2.9);
+      this.wingTipR.set(6.4, -0.15, 2.9);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else if (wing === 'wing_f14') {
+      // F-14 Tomcat: Variable-Geometry Swing Wings + Twin Canted Fins + Stabilators
+      const glove = new THREE.Mesh(geo('wing_f14_glove', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -1.2);
+        shape.lineTo(2.2, 1.8);
+        shape.lineTo(2.2, 3.4);
+        shape.lineTo(0, 3.4);
+        shape.lineTo(-2.2, 3.4);
+        shape.lineTo(-2.2, 1.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.38, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.12, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(glove);
+
+      const twinFinGeo = geo('wing_f14_vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.2, 0);
+        shape.lineTo(1.6, 2.7);
+        shape.lineTo(0.8, 2.7);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.55, 1.55]) {
+        const sign = sx > 0 ? 1 : -1;
+        const vfin = new THREE.Mesh(twinFinGeo, bodyMat);
+        vfin.position.set(sx, 0.55, 2.2);
+        vfin.rotation.z = -sign * 0.08;
+        airframeParts.push(vfin);
+      }
+
+      const hfin = new THREE.Mesh(geo('wing_f14_hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.8, 1.2);
+        shape.lineTo(2.8, 2.0);
+        shape.lineTo(0, 1.2);
+        shape.lineTo(-2.8, 2.0);
+        shape.lineTo(-2.8, 1.2);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.2, 3.6);
+        return g;
+      }), darkMat);
+      airframeParts.push(hfin);
+
+      // Swing wing panels
+      const wingPanelLGeo = geo('wing_f14_panel_l', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.6);
+        shape.lineTo(-4.8, 0.4);
+        shape.lineTo(-4.8, 1.5);
+        shape.lineTo(0, 1.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        return g;
+      });
+      const wingPanelRGeo = geo('wing_f14_panel_r', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.6);
+        shape.lineTo(4.8, 0.4);
+        shape.lineTo(4.8, 1.5);
+        shape.lineTo(0, 1.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        return g;
+      });
+
+      const swingGroupL = new THREE.Group();
+      swingGroupL.position.set(-1.85, -0.12, 1.0);
+      const meshL = new THREE.Mesh(wingPanelLGeo, wingMat);
+      swingGroupL.add(meshL);
+      const tipMeshL = makeTip(new THREE.Vector3(-4.8, 0, 0.95));
+      swingGroupL.add(tipMeshL);
+
+      const swingGroupR = new THREE.Group();
+      swingGroupR.position.set(1.85, -0.12, 1.0);
+      const meshR = new THREE.Mesh(wingPanelRGeo, wingMat);
+      swingGroupR.add(meshR);
+      const tipMeshR = makeTip(new THREE.Vector3(4.8, 0, 0.95));
+      swingGroupR.add(tipMeshR);
+
+      airframeParts.push(swingGroupL, swingGroupR);
+
+      this.swingWings = {
+        groupL: swingGroupL,
+        groupR: swingGroupR,
+        pivotL: new THREE.Vector3(-1.85, -0.12, 1.0),
+        pivotR: new THREE.Vector3(1.85, -0.12, 1.0),
+      };
+      this.currentSweep = 0;
+      this.wingTipL.set(-6.65, -0.12, 1.95);
+      this.wingTipR.set(6.65, -0.12, 1.95);
+
+    } else if (wing === 'wing_f22') {
+      // F-22 Raptor: Diamond Stealth Wings + Canted Twin Fins + Stealth Horizontal Tails
+      const f22Wing = new THREE.Mesh(geo('wing_f22_main', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -0.6);
+        shape.lineTo(6.5, 2.2);
+        shape.lineTo(6.5, 3.1);
+        shape.lineTo(0, 4.0);
+        shape.lineTo(-6.5, 3.1);
+        shape.lineTo(-6.5, 2.2);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.15, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(f22Wing);
+
+      const f22FinGeo = geo('wing_f22_vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0);
+        shape.lineTo(1.6, 2.6);
+        shape.lineTo(0.6, 2.6);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.75, 1.75]) {
+        const sign = sx > 0 ? 1 : -1;
+        const fin = new THREE.Mesh(f22FinGeo, bodyMat);
+        fin.position.set(sx, 0.55, 2.4);
+        fin.rotation.z = -sign * 0.49;
+        airframeParts.push(fin);
+      }
+
+      const f22Hfin = new THREE.Mesh(geo('wing_f22_hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.6, 0.8);
+        shape.lineTo(2.6, 1.7);
+        shape.lineTo(0, 1.4);
+        shape.lineTo(-2.6, 1.7);
+        shape.lineTo(-2.6, 0.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.25, 3.6);
+        return g;
+      }), darkMat);
+      airframeParts.push(f22Hfin);
+
+      this.wingTipL.set(-6.5, -0.15, 2.65);
+      this.wingTipR.set(6.5, -0.15, 2.65);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
+    } else if (wing === 'wing_su30') {
+      // Su-30 Flanker: Tandem Triplane Canards + Swept Wings + Twin Tails + Tail Sting
+      const su30Wing = new THREE.Mesh(geo('wing_su30_main', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, -1.0);
+        shape.lineTo(6.6, 2.0);
+        shape.lineTo(6.6, 3.0);
+        shape.lineTo(0, 2.6);
+        shape.lineTo(-6.6, 3.0);
+        shape.lineTo(-6.6, 2.0);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, -0.15, 0);
+        return g;
+      }), wingMat);
+      airframeParts.push(su30Wing);
+
+      const railGeo = geo('wing_su30_rail', () => {
+        const g = new THREE.BoxGeometry(0.12, 0.12, 1.8);
+        return g;
+      });
+      for (const sx of [-6.6, 6.6]) {
+        const rail = new THREE.Mesh(railGeo, darkMat);
+        rail.position.set(sx, -0.15, 2.5);
+        airframeParts.push(rail);
+      }
+
+      // Tandem Triplane Foreplane Canards
+      const su30Canards = new THREE.Mesh(geo('wing_su30_canards', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.8, 0.9);
+        shape.lineTo(2.8, 1.6);
+        shape.lineTo(0, 1.0);
+        shape.lineTo(-2.8, 1.6);
+        shape.lineTo(-2.8, 0.9);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.18, -2.2);
+        return g;
+      }), wingMat);
+      airframeParts.push(su30Canards);
+
+      const su30FinGeo = geo('wing_su30_vfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.4, 0);
+        shape.lineTo(1.8, 2.8);
+        shape.lineTo(0.6, 2.8);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+        g.rotateY(-Math.PI / 2);
+        return g;
+      });
+      for (const sx of [-1.65, 1.65]) {
+        const vfin = new THREE.Mesh(su30FinGeo, bodyMat);
+        vfin.position.set(sx, 0.55, 2.2);
+        airframeParts.push(vfin);
+      }
+
+      const tailSting = new THREE.Mesh(geo('wing_su30_sting', () => {
+        const g = new THREE.CylinderGeometry(0.24, 0.16, 2.4, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      tailSting.position.set(0, 0.1, 4.8);
+      airframeParts.push(tailSting);
+
+      const su30Hfin = new THREE.Mesh(geo('wing_su30_hfin', () => {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(2.8, 1.4);
+        shape.lineTo(2.8, 2.2);
+        shape.lineTo(0, 1.4);
+        shape.lineTo(-2.8, 2.2);
+        shape.lineTo(-2.8, 1.4);
+        shape.closePath();
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        g.translate(0, 0.15, 3.6);
+        return g;
+      }), darkMat);
+      airframeParts.push(su30Hfin);
+
+      this.wingTipL.set(-6.6, -0.15, 2.5);
+      this.wingTipR.set(6.6, -0.15, 2.5);
+      airframeParts.push(makeTip(this.wingTipL), makeTip(this.wingTipR));
+
     } else {
       // wing_default (Standard Delta)
       const sweptWing = new THREE.Mesh(geo('wing', () => {
@@ -1778,6 +2103,24 @@ export class Jet {
     }
     if (this.cyberSpine) {
       this.cyberSpine.material.emissiveIntensity = 2.0 + Math.sin(time * 8) * 1.0;
+    }
+    // F-14 Tomcat Swing Wings: Dynamic Variable Sweep
+    if (this.swingWings) {
+      const isFullSpeed = Boolean(info.boost || info.super || (fx && fx.turbo));
+      const targetSweep = isFullSpeed ? 0.76 : 0.0;
+      this.currentSweep = THREE.MathUtils.lerp(this.currentSweep || 0, targetSweep, Math.min(1, dt * 7.0));
+      this.swingWings.groupL.rotation.y = -this.currentSweep;
+      this.swingWings.groupR.rotation.y = this.currentSweep;
+
+      const cosS = Math.cos(this.currentSweep);
+      const sinS = Math.sin(this.currentSweep);
+      const xL = -4.8 * cosS + 0.95 * sinS;
+      const zL = 4.8 * sinS + 0.95 * cosS;
+      this.wingTipL.set(this.swingWings.pivotL.x + xL, this.swingWings.pivotL.y, this.swingWings.pivotL.z + zL);
+
+      const xR = 4.8 * cosS - 0.95 * sinS;
+      const zR = 4.8 * sinS + 0.95 * cosS;
+      this.wingTipR.set(this.swingWings.pivotR.x + xR, this.swingWings.pivotR.y, this.swingWings.pivotR.z + zR);
     }
     this.shield.visible = Boolean(info.invuln);
     if (this.shield.visible) { this.shield.rotation.y += dt * 2; this.shield.rotation.x += dt * 1.3; }

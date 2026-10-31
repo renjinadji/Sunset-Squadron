@@ -61,7 +61,7 @@ test('shared/shop toEsModuleSource renders importable browser module', async () 
 
 test('procedural cosmetics catalog covers all cosmetic styles across 10 categories including fuselage, canopy, intake, and nozzle', () => {
   const expectedKits = {
-    wing: ['wing_default', 'wing_xwing', 'wing_triplane', 'wing_twinboom', 'wing_saucer'],
+    wing: ['wing_default', 'wing_xwing', 'wing_triplane', 'wing_twinboom', 'wing_saucer', 'wing_eurofighter', 'wing_f14', 'wing_f22', 'wing_su30'],
     fuselage: ['fuse_default', 'fuse_needle', 'fuse_lifting', 'fuse_heavy', 'fuse_stealth', 'fuse_cyber'],
     finish: ['finish_default', 'finish_chrome', 'finish_synth', 'finish_holo', 'finish_gold'],
     canopy: ['canopy_default', 'canopy_amber', 'canopy_stealth', 'canopy_bubble', 'canopy_cage', 'canopy_holo'],
@@ -155,4 +155,21 @@ test('procedural cosmetics catalog covers all cosmetic styles across 10 categori
 
   const cyber = shop.itemById('fuse_cyber');
   assert.strictEqual(cyber.params.exoRibs, 4);
+
+  const euro = shop.itemById('wing_eurofighter');
+  assert.strictEqual(euro.params.canards, true);
+  assert.strictEqual(euro.params.delta, true);
+
+  const f14 = shop.itemById('wing_f14');
+  assert.strictEqual(f14.params.swingWing, true);
+  assert.strictEqual(f14.params.variableSweep, true);
+
+  const f22 = shop.itemById('wing_f22');
+  assert.strictEqual(f22.params.diamond, true);
+  assert.strictEqual(f22.params.cantedFins, true);
+
+  const su30 = shop.itemById('wing_su30');
+  assert.strictEqual(su30.params.tandemTriplane, true);
+  assert.strictEqual(su30.params.canards, true);
+  assert.strictEqual(su30.params.twinTails, true);
 });

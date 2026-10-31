@@ -977,6 +977,20 @@
     * Selecting fuselage cosmetics automatically re-orients the 3D turntable camera to an elevated 3/4 isometric side angle (`turntableYaw = 0.58, turntablePitch = 0.22`) and plays an audio blip.
     * Added `.fuselage-tag` badge on lobby roster cards.
   - **Automated Tests:** Expanded `test/shop.test.js` asserting all 10 categories and procedural fuselage parameters. 51/51 tests pass.
+- **Advanced Wing Designs & Variable Sweep Aerodynamics (`shared/shop.js`, `public/js/entities.js`, `public/js/main.js`, `test/shop.test.js`):**
+  - **4 New Iconic Wing Airframes:**
+    * **Typhoon Canard Delta** (`wing_eurofighter`, 500 CR): close-coupled all-moving foreplane canards with agile cropped delta wings and tall ECM fin.
+    * **Tomcat Variable Sweep** (`wing_f14`, 850 CR): dynamic variable-geometry swing wings that automatically sweep back to high-Mach delta angle when reaching full speed (boost/super/turbo), with twin vertical stabilizers.
+    * **Raptor Diamond Stealth** (`wing_f22`, 1100 CR): clipped diamond trapezoidal stealth planform with 28° canted twin vertical stabilizers and diamond horizontal stabilators.
+    * **Flanker Tandem Triplane** (`wing_su30`, 1350 CR): tandem triplane configuration pairing LERX canards with swept wings, twin tail booms, and central tail sting.
+  - **3D Procedural Swing-Wing Kinematics (`public/js/entities.js`):**
+    * Implemented left and right wing pivot groups (`this.swingWings`) for `wing_f14`.
+    * In `updateVisual()`, dynamically lerps wing sweep angle between unswept (0.0 rad, spread out) and supersonic swept-back (0.76 rad / ~44°) based on full-speed flight inputs (`info.boost`, `info.super`, `fx.turbo`).
+    * Dynamically recomputes wingtip coordinates (`this.wingTipL`, `this.wingTipR`) so wingtip navigation lights and lightning contrail arcs sweep back in real time with the moving wing panels.
+  - **Hangar UI & Preview Integration (`public/js/main.js`):**
+    * In `previewItem()`, selecting `Wings` re-orients turntable camera to an elevated top-down angle (`turntableYaw = 0.42, turntablePitch = 0.32`).
+    * Previewing `wing_f14` triggers `previewBoostTimer = 3.5`, demonstrating the swing wings sweeping back dynamically in the 3D turntable preview.
+  - **Automated Tests:** Updated `test/shop.test.js` asserting all 9 wing items and procedural parameters. 51/51 tests pass.
 
 ### Pending / Next Up
 - All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!
