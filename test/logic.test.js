@@ -251,3 +251,35 @@ test('shared/pilots toEsModuleSource renders importable browser module', () => {
     assert.strictEqual(typeof mod.perkMultipliers, 'function');
   });
 });
+
+test('assessRocketThreat: head-on, glancing, retreating, and critical proximity', () => {
+  const target = { x: 0, y: 100, z: 100 };
+
+  // Direct head-on incoming rocket at 100m (alignment = 1.0, distance = 100)
+  const incoming = logic.assessRocketThreat({ x: 0, y: 100, z: 0 }, { x: 0, y: 0, z: 1 }, target);
+  assert.strictEqual(incoming.threatening, true);
+  assert.strictEqual(incoming.distance, 100);
+  assert.strictEqual(incoming.alignment, 1);
+  assert.strictEqual(incoming.critical, false);
+  assert.ok(incoming.timeToImpact > 0.7);
+
+  // Imminent critical threat at 30m (< 45m threshold)
+  const imminent = logic.assessRocketThreat({ x: 0, y: 100, z: 70 }, { x: 0, y: 0, z: 1 }, target);
+  assert.strictEqual(imminent.threatening, true);
+  assert.strictEqual(imminent.distance, 30);
+  assert.strictEqual(imminent.critical, true);
+
+  // Rocket flying away from target (alignment = -1.0)
+  const retreating = logic.assessRocketThreat({ x: 0, y: 100, z: 50 }, { x: 0, y: 0, z: -1 }, target);
+  assert.strictEqual(retreating.threatening, false);
+  assert.strictEqual(retreating.alignment, -1);
+
+  // Rocket flying perpendicular across (alignment = 0.0)
+  const crossing = logic.assessRocketThreat({ x: -50, y: 100, z: 100 }, { x: 0, y: 1, z: 0 }, target);
+  assert.strictEqual(crossing.threatening, false);
+
+  // Rocket outside max detection range (> 180m)
+  const outOfRange = logic.assessRocketThreat({ x: 0, y: 100, z: -150 }, { x: 0, y: 0, z: 1 }, target);
+  assert.strictEqual(outOfRange.threatening, false);
+  assert.strictEqual(outOfRange.distance, 250);
+});

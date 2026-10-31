@@ -83,6 +83,8 @@ const ui = {
   hudWeather: $('hud-weather'),
   hudEvent: $('hud-event'), hudEventText: $('hud-event-text'), hudEventHp: $('hud-event-hp'), hudEventHpFill: $('hud-event-hp-fill'),
   hudFeed: $('hud-feed'), hudStunts: $('hud-stunts'), hudBanner: $('hud-banner'), crownArrow: $('crown-arrow'),
+  threatVignette: $('threat-vignette'), missileArrow: $('missile-arrow'), missileArrowLabel: $('missile-arrow-label'),
+  hudMissileWarning: $('hud-missile-warning'), warningTitle: $('warning-title'), warningDist: $('warning-dist'), warningHint: $('warning-hint'),
   resultsTitle: $('results-title'), resultsList: $('results-list'), resultsBests: $('results-bests'),
   joyBase: $('joy-base'), joyKnob: $('joy-knob'), btnBoost: $('btn-boost'), btnFire: $('btn-fire'),
   emoteBar: $('emote-bar'),
@@ -495,9 +497,17 @@ function connectSocket() {
   socket.on('finish', (e) => onFinish(e));
   socket.on('crown', (e) => onCrownEvent(e));
   socket.on('roll', (e) => { if (e.id !== game.myId) { const r = remote.get(e.id); if (r) r.rollingUntil = nowS() + BARREL_ROLL_TIME; } });
+  socket.on('missileLock', () => {
+    sound.updateMissileWarning(true, false, 1.2);
+  });
   socket.on('deflect', (e) => {
     gfx.particles.burst(arrToV(e.p), 14, 18, { colors: SPLASH_COLORS, life: 0.6, size: 1.2 });
-    if (e.id === game.myId) { addFeed('Barrel roll! Rocket deflected'); sound.rollSwoosh(); }
+    if (e.id === game.myId) {
+      addFeed('⚡ Barrel roll! Missile deflected');
+      sound.deflectChime();
+      sound.rollSwoosh();
+      triggerDeflectedFeedback();
+    }
   });
   socket.on('boom', (e) => {
     const p = arrToV(e.p);
@@ -607,6 +617,13 @@ function clearRoundEntities() {
   ui.hudFeed.innerHTML = '';
   ui.hudStunts.innerHTML = '';
   ui.hudPowerups.innerHTML = '';
+  if (ui.hudMissileWarning) {
+    ui.hudMissileWarning.classList.add('hidden');
+    ui.hudMissileWarning.classList.remove('deflected', 'critical');
+    ui.missileArrow.classList.add('hidden');
+    ui.threatVignette.classList.add('hidden');
+  }
+  sound.updateMissileWarning(false);
   me.fx = {};
   puHtml = '';
 }
@@ -787,6 +804,13 @@ function endRound(results) {
   ui.touch.classList.add('hidden');
   ui.results.classList.remove('hidden');
   ui.hudPowerups.innerHTML = '';
+  if (ui.hudMissileWarning) {
+    ui.hudMissileWarning.classList.add('hidden');
+    ui.hudMissileWarning.classList.remove('deflected', 'critical');
+    ui.missileArrow.classList.add('hidden');
+    ui.threatVignette.classList.add('hidden');
+  }
+  sound.updateMissileWarning(false);
   game.event = null;
   removeGoldBalloon();
   hideEventPill();
@@ -912,9 +936,12 @@ function onSnapshot(snap) {
       const mesh = new Rocket(pilotFor(rk.o).colors.trail);
       mesh.group.position.set(rk.p[0], rk.p[1], rk.p[2]);
       gfx.scene.add(mesh.group);
-      r = { mesh, pos: new THREE.Vector3(), dir: new THREE.Vector3(), lastAt: t, fresh: true };
+      r = { mesh, pos: new THREE.Vector3(), dir: new THREE.Vector3(), lastAt: t, fresh: true, owner: rk.o, tg: rk.tg || null, team: rk.tm || null };
       rockets.set(rk.id, r);
     }
+    r.owner = rk.o;
+    r.tg = rk.tg || null;
+    r.team = rk.tm || null;
     r.pos.set(rk.p[0], rk.p[1], rk.p[2]);
     r.dir.set(rk.d[0], rk.d[1], rk.d[2]);
     r.lastAt = t;
@@ -1645,6 +1672,7 @@ function stepLocalFlight(dt) {
   ui.hudSpeed.textContent = Math.round(me.speed).toString();
   ui.hudScore.textContent = String(me.score);
   updateCrownArrow();
+  updateMissileWarningSystem();
   updatePowerupHud();
 }
 
@@ -1687,6 +1715,122 @@ function updateCrownArrow() {
   const onScreen = tmpV3.z < 0 && Math.abs(tmpV3.x / tmpV3.z) < 0.9 && Math.abs(tmpV3.y / tmpV3.z) < 0.6;
   ui.crownArrow.classList.toggle('hidden', onScreen && d < 400);
   ui.crownArrow.style.transform = `rotate(${ang}rad) translateY(-130px)`;
+}
+
+// ---------------------------------------------------------------------------
+// Missile / Firework Warning System
+// ---------------------------------------------------------------------------
+let deflectedTimer = null;
+function triggerDeflectedFeedback() {
+  if (!ui.hudMissileWarning) return;
+  ui.warningTitle.textContent = 'MISSILE DEFLECTED!';
+  ui.warningDist.textContent = 'THREAT CLEARED';
+  ui.warningHint.textContent = 'BARREL ROLL SUCCESS';
+  ui.hudMissileWarning.classList.remove('hidden', 'critical');
+  ui.hudMissileWarning.classList.add('deflected');
+  if (ui.missileArrow) ui.missileArrow.classList.add('hidden');
+  if (ui.threatVignette) ui.threatVignette.classList.add('hidden');
+  clearTimeout(deflectedTimer);
+  deflectedTimer = setTimeout(() => {
+    ui.hudMissileWarning.classList.remove('deflected');
+    ui.hudMissileWarning.classList.add('hidden');
+  }, 1400);
+}
+
+function updateMissileWarningSystem() {
+  if (game.phase !== 'playing' || me.tumble > 0) {
+    if (ui.hudMissileWarning && !ui.hudMissileWarning.classList.contains('deflected')) {
+      ui.hudMissileWarning.classList.add('hidden');
+    }
+    if (ui.missileArrow) ui.missileArrow.classList.add('hidden');
+    if (ui.threatVignette) ui.threatVignette.classList.add('hidden');
+    sound.updateMissileWarning(false);
+    return;
+  }
+
+  let bestThreat = null;
+  let bestDist = Infinity;
+
+  for (const r of rockets.values()) {
+    // Ignore own rockets
+    if (r.owner === game.myId) continue;
+    // In Red vs Blue, ignore teammates
+    if (game.mode === 'teams' && r.team && r.team === (game.myTeam === 'blue' ? 'b' : 'r')) continue;
+
+    const rPos = r.mesh.group.position;
+    const d = rPos.distanceTo(me.pos);
+    if (d > 180) continue;
+
+    // Direction from rocket to player
+    tmpV.copy(me.pos).sub(rPos);
+    const toLen = tmpV.length();
+    if (toLen < 0.001) continue;
+    tmpV.multiplyScalar(1 / toLen);
+
+    // Rocket alignment toward player
+    const align = r.dir.dot(tmpV);
+    const isLockedOnMe = (r.tg === game.myId);
+
+    // Threat if locked on me or closing within forward cone
+    if (isLockedOnMe || (d < 150 && align > 0.42)) {
+      if (d < bestDist) {
+        bestDist = d;
+        bestThreat = {
+          pos: rPos,
+          dist: d,
+          homing: isLockedOnMe,
+          critical: d < 45 || (d / (ROCKET_SPEED * Math.max(0.3, align)) < 0.65),
+        };
+      }
+    }
+  }
+
+  if (!bestThreat) {
+    if (ui.hudMissileWarning && !ui.hudMissileWarning.classList.contains('deflected')) {
+      ui.hudMissileWarning.classList.add('hidden');
+    }
+    if (ui.missileArrow) ui.missileArrow.classList.add('hidden');
+    if (ui.threatVignette) ui.threatVignette.classList.add('hidden');
+    sound.updateMissileWarning(false);
+    return;
+  }
+
+  // Audio tone
+  sound.updateMissileWarning(true, bestThreat.critical);
+
+  // HUD warning banner
+  if (ui.hudMissileWarning && !ui.hudMissileWarning.classList.contains('deflected')) {
+    ui.hudMissileWarning.classList.remove('hidden');
+    ui.hudMissileWarning.classList.toggle('critical', bestThreat.critical);
+    ui.warningTitle.textContent = bestThreat.critical
+      ? '⚠️ EVADE NOW!'
+      : (bestThreat.homing ? '⚠️ MISSILE LOCKED' : '⚠️ MISSILE INBOUND');
+    ui.warningDist.textContent = `${Math.round(bestThreat.dist)}m`;
+    ui.warningHint.textContent = bestThreat.critical ? 'DOUBLE-TAP ROLL / [Q]' : 'INCOMING FIREWORK';
+  }
+
+  // Threat vignette
+  if (ui.threatVignette) {
+    ui.threatVignette.classList.remove('hidden');
+    ui.threatVignette.classList.toggle('critical', bestThreat.critical);
+  }
+
+  // Directional Threat Arrow
+  if (ui.missileArrow) {
+    tmpV2.copy(bestThreat.pos).sub(me.pos);
+    tmpV3.copy(tmpV2).applyQuaternion(tmpQ.copy(gfx.camera.quaternion).invert());
+    const ang = Math.atan2(tmpV3.x, -tmpV3.z);
+    ui.missileArrow.classList.remove('hidden');
+    ui.missileArrow.classList.toggle('critical', bestThreat.critical);
+    ui.missileArrow.style.transform = `rotate(${ang}rad) translateY(-140px)`;
+
+    let label = 'MISSILE';
+    if (tmpV3.z > 0) label = 'BEHIND!';
+    else if (tmpV3.x < -15) label = 'LEFT!';
+    else if (tmpV3.x > 15) label = 'RIGHT!';
+    else label = 'AHEAD!';
+    if (ui.missileArrowLabel) ui.missileArrowLabel.textContent = `${label} ${Math.round(bestThreat.dist)}m`;
+  }
 }
 
 // ---------------------------------------------------------------------------

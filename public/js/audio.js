@@ -10,6 +10,7 @@ export class SoundEngine {
     this.unlocked = false;
     this.engine = null;
     this.muted = false;
+    this.lastWarningBeepAt = 0;
   }
 
   initAndUnlock() {
@@ -453,6 +454,49 @@ export class SoundEngine {
       o.connect(g).connect(this.master);
       o.start(st);
       o.stop(st + 0.5);
+    });
+  }
+
+  /**
+   * Procedural Radar Warning Receiver (RWR) missile alert beeps.
+   * - active: boolean
+   * - critical: boolean (true if < 45m or time-to-impact < 0.6s)
+   */
+  updateMissileWarning(active, critical = false, volume = 1) {
+    if (!this.ctx || this.muted || !active) return;
+    const t = this.ctx.currentTime;
+    const interval = critical ? 0.11 : 0.28;
+    if (t - this.lastWarningBeepAt < interval) return;
+    this.lastWarningBeepAt = t;
+    const freq = critical ? 1380 : 940;
+    const osc = this.ctx.createOscillator();
+    osc.type = critical ? 'sawtooth' : 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    if (critical) {
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.12, t + 0.05);
+    }
+    const g = this.ctx.createGain();
+    const peak = (critical ? 0.13 : 0.08) * volume;
+    this._env(g, t, peak, 0.008, critical ? 0.06 : 0.11);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + (critical ? 0.08 : 0.13));
+  }
+
+  /** Triumphant chime when an incoming missile is deflected by a barrel roll. */
+  deflectChime(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [NOTE.G5, NOTE.D6].forEach((f, i) => {
+      const st = t + i * 0.08;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      this._env(g, st, 0.14 * volume, 0.005, 0.25);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.3);
     });
   }
 

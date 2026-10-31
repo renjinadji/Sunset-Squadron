@@ -25,6 +25,7 @@ const {
   islandCollision, generateWeather, homingAngle,
   raceFinishPoints, gateCrossing, compareRaceResults,
   EVENT_TYPES, generateEvent,
+  assessRocketThreat,
 } = require('./server/logic');
 const { PILOTS, POWERUPS, POWERUP_TYPES, PILOT_IDS, pilotById, perkMultipliers } = PILOT_DATA;
 
@@ -1233,7 +1234,16 @@ function stepRockets(dt, t) {
     if (t - r.born > ROCKET_LIFE) continue;
     if (!r.target) {
       const tg = findHomingTarget(r, t);
-      if (tg) { r.target = tg.id; r.targetKind = tg.kind; }
+      if (tg) {
+        r.target = tg.id;
+        r.targetKind = tg.kind;
+        if (tg.kind === 'player') {
+          const victim = state.players.get(tg.id);
+          if (victim && !victim.isBot) {
+            io.to(tg.id).emit('missileLock', { id: r.id, shooter: r.owner });
+          }
+        }
+      }
     } else if (r.targetKind !== 'decoy') {
       // Retarget to decoy if an enemy decoy is closer and within homing cone
       let curD = HOMING_RANGE * 2;
@@ -2253,7 +2263,14 @@ function snapshot(t) {
       ...(state.settings.mode === 'race' ? { gi: p.race.gateIndex, gp: p.race.gatesPassed, fin: p.race.finished ? p.race.finishRank : 0 } : {}),
     })),
     pickups: state.pickups.map((k) => (k.alive ? 1 : 0)),
-    rockets: state.rockets.map((r) => ({ id: r.id, o: r.owner, p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)], d: [r3(r.d.x), r3(r.d.y), r3(r.d.z)] })),
+    rockets: state.rockets.map((r) => ({
+      id: r.id,
+      o: r.owner,
+      p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)],
+      d: [r3(r.d.x), r3(r.d.y), r3(r.d.z)],
+      ...(r.targetKind === 'player' && r.target ? { tg: r.target } : {}),
+      ...(r.team ? { tm: r.team === 'blue' ? 'b' : 'r' } : {}),
+    })),
     mines: state.mines.map((m) => ({ id: m.id, o: m.owner, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)], arm: t >= m.armAt ? 1 : 0 })),
     decoys: state.decoys.map((d) => ({ id: d.id, o: d.owner, pilot: d.pilot, p: [r2(d.p.x), r2(d.p.y), r2(d.p.z)], q: [r3(d.quat.x), r3(d.quat.y), r3(d.quat.z), r3(d.quat.w)], spd: r2(d.speed) })),
     balloons: state.settings.mode === 'blitz' ? state.balloons.map((b) => (b.alive ? 1 : 0)) : [],

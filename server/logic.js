@@ -228,6 +228,33 @@ function compareRaceResults(a, b) {
   return b.score - a.score;
 }
 
+/**
+ * Determines whether a rocket poses an incoming threat to a target position.
+ * Returns { threatening: boolean, distance: number, closingSpeed: number, alignment: number, timeToImpact: number, critical: boolean }
+ */
+function assessRocketThreat(rocketPos, rocketDir, targetPos, rocketSpeed = 130, maxDist = 180, minAlignment = 0.4) {
+  const d = dist(rocketPos, targetPos);
+  if (d > maxDist || d < 0.001) {
+    return { threatening: false, distance: r2(d), alignment: -1, closingSpeed: 0, timeToImpact: Infinity, critical: false };
+  }
+  const toTarget = vsub(targetPos, rocketPos);
+  const toTargetNorm = vnorm(toTarget);
+  const alignment = vdot(rocketDir, toTargetNorm);
+  if (alignment < minAlignment) {
+    return { threatening: false, distance: r2(d), alignment: r3(alignment), closingSpeed: 0, timeToImpact: Infinity, critical: false };
+  }
+  const closingSpeed = rocketSpeed * alignment;
+  const timeToImpact = closingSpeed > 0 ? d / closingSpeed : Infinity;
+  return {
+    threatening: true,
+    distance: r2(d),
+    alignment: r3(alignment),
+    closingSpeed: r2(closingSpeed),
+    timeToImpact: r2(timeToImpact),
+    critical: d < 45 || timeToImpact < 0.6,
+  };
+}
+
 module.exports = {
   mulberry32,
   quatFromYPR, forwardFromYP, wrapAngle,
@@ -238,4 +265,5 @@ module.exports = {
   homingAngle,
   RACE_FINISH_BASE, RACE_FINISH_STEP, RACE_FINISH_MIN, raceFinishPoints,
   gateCrossing, compareRaceResults,
+  assessRocketThreat,
 };
