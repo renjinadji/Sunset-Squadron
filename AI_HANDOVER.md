@@ -960,6 +960,23 @@
     * Selecting nozzle cosmetics automatically rotates the 3D turntable jet to the rear 3/4 angle (`turntableYaw = 2.45, turntablePitch = 0.15`), fires afterburners (`previewBoostTimer = 3.5`), and plays audio blip.
     * Added `.nozzle-tag` badge on lobby roster cards.
   - **Automated Tests:** Expanded `test/shop.test.js` asserting all 9 categories and procedural nozzle parameters. 51/51 tests pass.
+- **Procedural Fuselage Airframe Cosmetics Engine (`shared/shop.js`, `public/js/entities.js`, `public/index.html`, `public/style.css`, `public/js/main.js`):**
+  - **Fuselage Category & Equipment Sync:** Added `fuselage` as the 10th cosmetic category in `SHOP_CATEGORIES` and `DEFAULT_EQUIPPED` (`fuse_default`).
+  - **Procedural Fuselage Catalog (6 Styles):**
+    * Standard Monocoque (`fuse_default`, 0 CR): balanced semi-monocoque aerodynamic fuselage with streamlined radome.
+    * Mach-3 Needle Dart (`fuse_needle`, 450 CR): ultra-slender high-Mach pencil fuselage with extended titanium pitot boom and sharp dorsal spine.
+    * Blended Lifting Body (`fuse_lifting`, 700 CR): flattened lifting-body fuselage with sweeping leading-edge root chine strakes (LERX) and drooped flanker radome.
+    * Armored Titanium Hull (`fuse_heavy`, 950 CR): reinforced heavy interceptor fuselage with 3 thick armor collars and chisel radome.
+    * Faceted Diamond Stealth (`fuse_stealth`, 1300 CR): low-observable faceted diamond cross-section with razor waterline chines and faceted radome.
+    * Quantum Railframe (`fuse_cyber`, 1750 CR): sci-fi carbon exoskeleton exposing an illuminated pulsing quantum conduit spine and 4 external hoop ribs.
+  - **3D Procedural Mesh & Material Integration (`public/js/entities.js`):**
+    * Implemented custom body contours, radome noses, tailcones, and fuselage details for each style.
+    * Added dynamic pulsing neon emission for `fuse_cyber`'s quantum conduit spine (`this.cyberSpine`).
+  - **Hangar UI Integration (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    * Added dedicated `Fuselage` touch tab in `#hangar-tabs`.
+    * Selecting fuselage cosmetics automatically re-orients the 3D turntable camera to an elevated 3/4 isometric side angle (`turntableYaw = 0.58, turntablePitch = 0.22`) and plays an audio blip.
+    * Added `.fuselage-tag` badge on lobby roster cards.
+  - **Automated Tests:** Expanded `test/shop.test.js` asserting all 10 categories and procedural fuselage parameters. 51/51 tests pass.
 
 ### Pending / Next Up
 - All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!

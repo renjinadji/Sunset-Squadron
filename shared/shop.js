@@ -7,10 +7,11 @@
  * single source of truth for cosmetic parameters, pricing and round sponsors.
  */
 
-const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'intake', 'nozzle', 'trail', 'firework', 'voice', 'visor'];
+const SHOP_CATEGORIES = ['wing', 'fuselage', 'finish', 'canopy', 'intake', 'nozzle', 'trail', 'firework', 'voice', 'visor'];
 
 const DEFAULT_EQUIPPED = {
   wing: 'wing_default',
+  fuselage: 'fuse_default',
   finish: 'finish_default',
   canopy: 'canopy_default',
   intake: 'intake_default',
@@ -62,6 +63,62 @@ const SHOP_ITEMS = [
     desc: 'Experimental flattened circular saucer wing.',
     price: 1500,
     params: { style: 'saucer', radius: 3.2, tube: 0.35 },
+  },
+
+  // --- Fuselages ('fuselage') ---
+  {
+    id: 'fuse_default',
+    category: 'fuselage',
+    name: 'Standard Monocoque',
+    desc: 'Balanced semi-monocoque aerodynamic fuselage with streamlined radome.',
+    description: 'Balanced semi-monocoque aerodynamic fuselage with streamlined radome.',
+    price: 0,
+    params: { style: 'standard' },
+  },
+  {
+    id: 'fuse_needle',
+    category: 'fuselage',
+    name: 'Mach-3 Needle Dart',
+    desc: 'Ultra-slender high-Mach pencil fuselage with extended titanium pitot boom.',
+    description: 'Ultra-slender high-Mach pencil fuselage with extended titanium pitot boom.',
+    price: 450,
+    params: { style: 'needle', slender: true, pitotBoom: true },
+  },
+  {
+    id: 'fuse_lifting',
+    category: 'fuselage',
+    name: 'Blended Lifting Body',
+    desc: 'Flattened lifting-body fuselage with sweeping leading-edge root chine strakes.',
+    description: 'Flattened lifting-body fuselage with sweeping leading-edge root chine strakes.',
+    price: 700,
+    params: { style: 'lifting', chines: true, blended: true },
+  },
+  {
+    id: 'fuse_heavy',
+    category: 'fuselage',
+    name: 'Armored Titanium Hull',
+    desc: 'Reinforced heavy interceptor fuselage with thick armor collars and chisel radome.',
+    description: 'Reinforced heavy interceptor fuselage with thick armor collars and chisel radome.',
+    price: 950,
+    params: { style: 'heavy', armored: true, collars: 3 },
+  },
+  {
+    id: 'fuse_stealth',
+    category: 'fuselage',
+    name: 'Faceted Diamond Stealth',
+    desc: 'Low-observable faceted diamond cross-section with razor waterline chines.',
+    description: 'Low-observable faceted diamond cross-section with razor waterline chines.',
+    price: 1300,
+    params: { style: 'stealth', faceted: true, diamondHull: true },
+  },
+  {
+    id: 'fuse_cyber',
+    category: 'fuselage',
+    name: 'Quantum Railframe',
+    desc: 'Sci-fi carbon exoskeleton exposing an illuminated pulsing quantum conduit spine.',
+    description: 'Sci-fi carbon exoskeleton exposing an illuminated pulsing quantum conduit spine.',
+    price: 1750,
+    params: { style: 'cyber', illuminatedSpine: true, exoRibs: 4 },
   },
 
   // --- Finishes ('finish') ---

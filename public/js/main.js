@@ -424,6 +424,15 @@ function renderRoster(lobby) {
         txt.appendChild(wTag);
       }
     }
+    if (equipped && equipped.fuselage && equipped.fuselage !== 'fuse_default') {
+      const fuse = itemById(equipped.fuselage);
+      if (fuse) {
+        const fuseTag = document.createElement('span');
+        fuseTag.className = 'tag cosmetic-tag fuselage-tag';
+        fuseTag.textContent = fuse.name.split(' ')[0].toUpperCase();
+        txt.appendChild(fuseTag);
+      }
+    }
     if (equipped && equipped.finish && equipped.finish !== 'finish_default') {
       const f = itemById(equipped.finish);
       if (f) {
@@ -924,7 +933,11 @@ function previewItem(item) {
   game.previewEquipped[item.category] = item.id;
   updateHangarPreview();
 
-  if (item.category === 'canopy') {
+  if (item.category === 'fuselage') {
+    turntableYaw = 0.58;
+    turntablePitch = 0.22;
+    sound.blip(600, 0.25);
+  } else if (item.category === 'canopy') {
     turntableYaw = 0.35;
     turntablePitch = 0.18;
     sound.blip(640, 0.25);

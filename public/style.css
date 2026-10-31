@@ -918,6 +918,7 @@ html, body {
   font-weight: 800;
 }
 #roster li .wing-tag { border-color: rgba(79, 241, 255, 0.5); color: var(--cyan); }
+#roster li .fuselage-tag { border-color: rgba(140, 180, 255, 0.5); color: #8cb4ff; }
 #roster li .finish-tag { border-color: rgba(255, 213, 74, 0.5); color: var(--gold); }
 #roster li .canopy-tag { border-color: rgba(255, 120, 220, 0.5); color: #ff85d8; }
 #roster li .intake-tag { border-color: rgba(255, 170, 50, 0.5); color: #ffaa33; }

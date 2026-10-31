@@ -155,9 +155,11 @@ export class Jet {
     this._disposables = [];
     this.synthOverlay = null;
     this.warpRings = null;
+    this.cyberSpine = null;
 
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
+    const fuselageChoice = (this.equipped && this.equipped.fuselage) || 'fuse_default';
     const canopyChoice = (this.equipped && this.equipped.canopy) || 'canopy_default';
     const intakeChoice = (this.equipped && this.equipped.intake) || 'intake_default';
     const nozzleChoice = (this.equipped && this.equipped.nozzle) || 'nozzle_default';
@@ -418,29 +420,263 @@ export class Jet {
     const airframeParts = [];
 
     // Core Fuselage, Nose, Tailcone, Canopy, Afterburner
-    const fuselage = new THREE.Mesh(geo('fuselage', () => {
-      const g = new THREE.CylinderGeometry(0.55, 1.35, 7.5, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), bodyMat);
-    fuselage.position.z = -0.4;
-    airframeParts.push(fuselage);
+    if (fuselageChoice === 'fuse_needle') {
+      // Mach-3 Needle Dart
+      const fuselage = new THREE.Mesh(geo('fuse_needle_body', () => {
+        const g = new THREE.CylinderGeometry(0.38, 1.2, 7.6, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), bodyMat);
+      fuselage.position.z = -0.3;
+      airframeParts.push(fuselage);
 
-    const nose = new THREE.Mesh(geo('nose', () => {
-      const g = new THREE.ConeGeometry(0.55, 2.4, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), darkMat);
-    nose.position.z = -5.3;
-    airframeParts.push(nose);
+      const nose = new THREE.Mesh(geo('fuse_needle_nose', () => {
+        const g = new THREE.ConeGeometry(0.38, 3.8, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      nose.position.z = -5.8;
+      airframeParts.push(nose);
 
-    const tailCone = new THREE.Mesh(geo('tailcone', () => {
-      const g = new THREE.CylinderGeometry(1.35, 0.95, 1.6, 6);
-      g.rotateX(-Math.PI / 2);
-      return g;
-    }), darkMat);
-    tailCone.position.z = 4.1;
-    airframeParts.push(tailCone);
+      const probeMat = new THREE.MeshStandardMaterial({
+        color: 0xe0e0e0,
+        metalness: 0.95,
+        roughness: 0.1,
+      });
+      this._disposables.push(probeMat);
+      const pitotBoom = new THREE.Mesh(geo('fuse_needle_boom', () => {
+        const g = new THREE.CylinderGeometry(0.04, 0.04, 1.8, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), probeMat);
+      pitotBoom.position.z = -8.5;
+      airframeParts.push(pitotBoom);
+
+      const dorsalSpine = new THREE.Mesh(geo('fuse_needle_spine', () => {
+        const g = new THREE.BoxGeometry(0.07, 0.32, 6.2);
+        return g;
+      }), darkMat);
+      dorsalSpine.position.set(0, 0.82, -0.5);
+      airframeParts.push(dorsalSpine);
+
+      const tailCone = new THREE.Mesh(geo('fuse_needle_tail', () => {
+        const g = new THREE.CylinderGeometry(1.2, 0.95, 1.6, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+
+    } else if (fuselageChoice === 'fuse_lifting') {
+      // Blended Lifting Body
+      const fuselage = new THREE.Mesh(geo('fuse_lifting_body', () => {
+        const g = new THREE.CylinderGeometry(0.65, 1.45, 7.5, 6);
+        g.rotateX(-Math.PI / 2);
+        g.scale(1.35, 0.85, 1.0);
+        return g;
+      }), bodyMat);
+      fuselage.position.z = -0.4;
+      airframeParts.push(fuselage);
+
+      const nose = new THREE.Mesh(geo('fuse_lifting_nose', () => {
+        const g = new THREE.ConeGeometry(0.65, 2.6, 6);
+        g.rotateX(-Math.PI / 2);
+        g.scale(1.3, 0.82, 1.0);
+        return g;
+      }), darkMat);
+      nose.position.set(0, -0.12, -5.3);
+      nose.rotation.x = -0.06;
+      airframeParts.push(nose);
+
+      const chineGeo = geo('fuse_lifting_chine', () => {
+        const g = new THREE.BoxGeometry(0.55, 0.12, 4.8);
+        return g;
+      });
+      for (const sx of [-1.22, 1.22]) {
+        const chine = new THREE.Mesh(chineGeo, bodyMat);
+        chine.position.set(sx, 0.05, -1.8);
+        airframeParts.push(chine);
+      }
+
+      const tailCone = new THREE.Mesh(geo('fuse_lifting_tail', () => {
+        const g = new THREE.CylinderGeometry(1.45, 0.95, 1.6, 6);
+        g.rotateX(-Math.PI / 2);
+        g.scale(1.25, 0.88, 1.0);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+
+    } else if (fuselageChoice === 'fuse_heavy') {
+      // Armored Titanium Hull
+      const fuselage = new THREE.Mesh(geo('fuse_heavy_body', () => {
+        const g = new THREE.CylinderGeometry(0.9, 1.55, 7.5, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), bodyMat);
+      fuselage.position.z = -0.4;
+      airframeParts.push(fuselage);
+
+      const nose = new THREE.Mesh(geo('fuse_heavy_nose', () => {
+        const g = new THREE.CylinderGeometry(0.25, 0.9, 2.2, 4);
+        g.rotateX(-Math.PI / 2);
+        g.rotateZ(Math.PI / 4);
+        return g;
+      }), darkMat);
+      nose.position.z = -5.2;
+      airframeParts.push(nose);
+
+      const armorMat = new THREE.MeshStandardMaterial({
+        color: 0x363442,
+        metalness: 0.9,
+        roughness: 0.25,
+        flatShading: true,
+      });
+      this._disposables.push(armorMat);
+
+      const collarZ = [-2.6, -0.4, 1.8];
+      const collarR = [1.22, 1.42, 1.56];
+      for (let ci = 0; ci < collarZ.length; ci++) {
+        const collar = new THREE.Mesh(geo(`fuse_heavy_collar_${ci}`, () => {
+          const g = new THREE.CylinderGeometry(collarR[ci], collarR[ci] * 1.02, 0.35, 8);
+          g.rotateX(-Math.PI / 2);
+          return g;
+        }), armorMat);
+        collar.position.z = collarZ[ci];
+        airframeParts.push(collar);
+      }
+
+      const tailCone = new THREE.Mesh(geo('fuse_heavy_tail', () => {
+        const g = new THREE.CylinderGeometry(1.55, 1.02, 1.6, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+
+    } else if (fuselageChoice === 'fuse_stealth') {
+      // Faceted Diamond Stealth
+      const fuselage = new THREE.Mesh(geo('fuse_stealth_body', () => {
+        const g = new THREE.CylinderGeometry(0.85, 1.75, 7.6, 4);
+        g.rotateX(-Math.PI / 2);
+        g.rotateZ(Math.PI / 4);
+        g.scale(1.4, 0.65, 1.0);
+        return g;
+      }), bodyMat);
+      fuselage.position.z = -0.35;
+      airframeParts.push(fuselage);
+
+      const nose = new THREE.Mesh(geo('fuse_stealth_nose', () => {
+        const g = new THREE.ConeGeometry(0.85, 2.8, 4);
+        g.rotateX(-Math.PI / 2);
+        g.rotateZ(Math.PI / 4);
+        g.scale(1.35, 0.65, 1.0);
+        return g;
+      }), darkMat);
+      nose.position.z = -5.4;
+      airframeParts.push(nose);
+
+      const chineGeo = geo('fuse_stealth_chine', () => {
+        const g = new THREE.BoxGeometry(0.18, 0.06, 7.4);
+        return g;
+      });
+      for (const sx of [-1.45, 1.45]) {
+        const chine = new THREE.Mesh(chineGeo, darkMat);
+        chine.position.set(sx, 0, -0.35);
+        airframeParts.push(chine);
+      }
+
+      const tailCone = new THREE.Mesh(geo('fuse_stealth_tail', () => {
+        const g = new THREE.CylinderGeometry(1.75, 1.0, 1.6, 4);
+        g.rotateX(-Math.PI / 2);
+        g.rotateZ(Math.PI / 4);
+        g.scale(1.3, 0.7, 1.0);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+
+    } else if (fuselageChoice === 'fuse_cyber') {
+      // Quantum Railframe Exoskeleton
+      const fuselage = new THREE.Mesh(geo('fuse_cyber_body', () => {
+        const g = new THREE.CylinderGeometry(0.5, 1.25, 7.5, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      fuselage.position.z = -0.4;
+      airframeParts.push(fuselage);
+
+      const nose = new THREE.Mesh(geo('fuse_cyber_nose', () => {
+        const g = new THREE.ConeGeometry(0.5, 2.6, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      nose.position.z = -5.4;
+      airframeParts.push(nose);
+
+      const cyberSpineMat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x00f0ff,
+        emissiveIntensity: 2.8,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      });
+      this._disposables.push(cyberSpineMat);
+
+      const spine = new THREE.Mesh(geo('fuse_cyber_spine', () => {
+        const g = new THREE.BoxGeometry(0.14, 0.22, 7.6);
+        return g;
+      }), cyberSpineMat);
+      spine.position.set(0, 0.72, -0.4);
+      airframeParts.push(spine);
+      this.cyberSpine = spine;
+
+      const ribZ = [-2.4, -0.9, 0.7, 2.3];
+      const ribR = [0.82, 1.02, 1.22, 1.36];
+      for (let ri = 0; ri < ribZ.length; ri++) {
+        const rib = new THREE.Mesh(geo(`fuse_cyber_rib_${ri}`, () => {
+          const g = new THREE.TorusGeometry(ribR[ri], 0.05, 4, 16);
+          return g;
+        }), bodyMat);
+        rib.position.set(0, 0, ribZ[ri]);
+        airframeParts.push(rib);
+      }
+
+      const tailCone = new THREE.Mesh(geo('fuse_cyber_tail', () => {
+        const g = new THREE.CylinderGeometry(1.25, 0.95, 1.6, 8);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+
+    } else {
+      // fuse_default: Standard Monocoque
+      const fuselage = new THREE.Mesh(geo('fuselage', () => {
+        const g = new THREE.CylinderGeometry(0.55, 1.35, 7.5, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), bodyMat);
+      fuselage.position.z = -0.4;
+      airframeParts.push(fuselage);
+
+      const nose = new THREE.Mesh(geo('nose', () => {
+        const g = new THREE.ConeGeometry(0.55, 2.4, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      nose.position.z = -5.3;
+      airframeParts.push(nose);
+
+      const tailCone = new THREE.Mesh(geo('tailcone', () => {
+        const g = new THREE.CylinderGeometry(1.35, 0.95, 1.6, 6);
+        g.rotateX(-Math.PI / 2);
+        return g;
+      }), darkMat);
+      tailCone.position.z = 4.1;
+      airframeParts.push(tailCone);
+    }
 
     if (canopyChoice === 'canopy_stealth') {
       const stealthCanopy = new THREE.Mesh(geo('canopy_stealth_mesh', () => {
@@ -1539,6 +1775,9 @@ export class Jet {
       this.warpRings[0].rotation.z += dt * 3.5;
       this.warpRings[1].rotation.z -= dt * 4.2;
       this.warpRings[2].rotation.z += dt * 5.0;
+    }
+    if (this.cyberSpine) {
+      this.cyberSpine.material.emissiveIntensity = 2.0 + Math.sin(time * 8) * 1.0;
     }
     this.shield.visible = Boolean(info.invuln);
     if (this.shield.visible) { this.shield.rotation.y += dt * 2; this.shield.rotation.x += dt * 1.3; }
