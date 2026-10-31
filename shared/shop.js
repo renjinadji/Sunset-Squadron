@@ -7,13 +7,14 @@
  * single source of truth for cosmetic parameters, pricing and round sponsors.
  */
 
-const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'intake', 'trail', 'firework', 'voice', 'visor'];
+const SHOP_CATEGORIES = ['wing', 'finish', 'canopy', 'intake', 'nozzle', 'trail', 'firework', 'voice', 'visor'];
 
 const DEFAULT_EQUIPPED = {
   wing: 'wing_default',
   finish: 'finish_default',
   canopy: 'canopy_default',
   intake: 'intake_default',
+  nozzle: 'nozzle_default',
   trail: 'trail_default',
   firework: 'fw_default',
   voice: 'voice_default',
@@ -215,6 +216,62 @@ const SHOP_ITEMS = [
     description: 'Sci-fi magnetic induction scoops with high-intensity glowing cyan plasma ion rings.',
     price: 1500,
     params: { style: 'plasma', ionRings: true, color: 0x4ff1ff },
+  },
+
+  // --- Engine Nozzles ('nozzle') ---
+  {
+    id: 'nozzle_default',
+    category: 'nozzle',
+    name: 'Titanium Iris Petals',
+    desc: 'Articulated convergent-divergent titanium exhaust petals with heated throat ring.',
+    description: 'Articulated convergent-divergent titanium exhaust petals with heated throat ring.',
+    price: 0,
+    params: { style: 'iris', petals: 12 },
+  },
+  {
+    id: 'nozzle_vector',
+    category: 'nozzle',
+    name: '3D Thrust-Vectoring Paddles',
+    desc: 'Multi-axis rectangular thrust-vectoring paddles mounted around the nozzle rim.',
+    description: 'Multi-axis rectangular thrust-vectoring paddles mounted around the nozzle rim.',
+    price: 400,
+    params: { style: 'vector', paddles: 4 },
+  },
+  {
+    id: 'nozzle_twin',
+    category: 'nozzle',
+    name: 'Dual Afterburner Pods',
+    desc: 'Twin side-by-side exhaust cowls with dual synchronized high-thrust afterburner plumes.',
+    description: 'Twin side-by-side exhaust cowls with dual synchronized high-thrust afterburner plumes.',
+    price: 650,
+    params: { style: 'twin', dualBurner: true },
+  },
+  {
+    id: 'nozzle_aerospike',
+    category: 'nozzle',
+    name: 'Linear Aerospike Torus',
+    desc: 'Annular aerospike plug nozzle projecting an electric violet/cyan plasma cone.',
+    description: 'Annular aerospike plug nozzle projecting an electric violet/cyan plasma cone.',
+    price: 900,
+    params: { style: 'aerospike', spikePlug: true },
+  },
+  {
+    id: 'nozzle_stealth',
+    category: 'nozzle',
+    name: 'Serrated Stealth Chevrons',
+    desc: 'Acoustic sawtooth chevron petals in radar-absorbent ceramic with gold heat-shield.',
+    description: 'Acoustic sawtooth chevron petals in radar-absorbent ceramic with gold heat-shield.',
+    price: 1200,
+    params: { style: 'stealth', chevrons: 8 },
+  },
+  {
+    id: 'nozzle_warp',
+    category: 'nozzle',
+    name: 'Hyperdrive Singularity Ring',
+    desc: 'Concentric floating neon magnetic acceleration rings focusing a quantum ion jet.',
+    description: 'Concentric floating neon magnetic acceleration rings focusing a quantum ion jet.',
+    price: 1600,
+    params: { style: 'warp', plasmaRings: 3 },
   },
 
   // --- Contrails ('trail') ---

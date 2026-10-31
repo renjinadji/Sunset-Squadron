@@ -154,11 +154,13 @@ export class Jet {
     }
     this._disposables = [];
     this.synthOverlay = null;
+    this.warpRings = null;
 
     const finish = (this.equipped && this.equipped.finish) || 'finish_default';
     const wing = (this.equipped && this.equipped.wing) || 'wing_default';
     const canopyChoice = (this.equipped && this.equipped.canopy) || 'canopy_default';
     const intakeChoice = (this.equipped && this.equipped.intake) || 'intake_default';
+    const nozzleChoice = (this.equipped && this.equipped.nozzle) || 'nozzle_default';
     const pilot = this.pilot;
 
     // Materials based on finish
@@ -371,9 +373,29 @@ export class Jet {
       });
     }
 
+    let burnerColor = 0xffb060;
+    let burnerEmissive = 0xff9a2a;
+    if (nozzleChoice === 'nozzle_aerospike') {
+      burnerColor = 0xcc88ff;
+      burnerEmissive = 0x8833ff;
+    } else if (nozzleChoice === 'nozzle_warp') {
+      burnerColor = 0x88ffff;
+      burnerEmissive = 0x00eeff;
+    } else if (nozzleChoice === 'nozzle_vector') {
+      burnerColor = 0xff8833;
+      burnerEmissive = 0xff5511;
+    } else if (nozzleChoice === 'nozzle_twin') {
+      burnerColor = 0xff9944;
+      burnerEmissive = 0xff6600;
+    } else if (nozzleChoice === 'nozzle_stealth') {
+      burnerColor = 0xffaa44;
+      burnerEmissive = 0xff7711;
+    }
+    this.burnerEmissiveHex = burnerEmissive;
+
     this.burnerMat = new THREE.MeshStandardMaterial({
-      color: 0xffb060,
-      emissive: 0xff9a2a,
+      color: burnerColor,
+      emissive: burnerEmissive,
       emissiveIntensity: 2.8,
       roughness: 0.4,
       flatShading: true,
@@ -544,13 +566,334 @@ export class Jet {
       airframeParts.push(canopy);
     }
 
-    this.burner = new THREE.Mesh(geo('burner', () => {
-      const g = new THREE.ConeGeometry(0.8, 3.0, 6);
-      g.rotateX(Math.PI / 2);
-      return g;
-    }), this.burnerMat);
-    this.burner.position.z = 5.6;
-    airframeParts.push(this.burner);
+    // Engine Exhaust Nozzle & Afterburner
+    if (nozzleChoice === 'nozzle_vector') {
+      // 3D Thrust-Vectoring Paddles
+      const collar = new THREE.Mesh(geo('nozzle_vector_cowl', () => {
+        const g = new THREE.CylinderGeometry(0.92, 0.96, 0.5, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), bodyMat);
+      collar.position.set(0, 0, 4.95);
+      airframeParts.push(collar);
+
+      const throat = new THREE.Mesh(geo('nozzle_vector_throat', () => {
+        const g = new THREE.CylinderGeometry(0.82, 0.82, 0.4, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      throat.position.set(0, 0, 5.0);
+      airframeParts.push(throat);
+
+      const paddleTBGeo = geo('nozzle_vector_paddle_tb', () => {
+        const g = new THREE.BoxGeometry(0.68, 0.08, 0.65);
+        return g;
+      });
+      const paddleLRGeo = geo('nozzle_vector_paddle_lr', () => {
+        const g = new THREE.BoxGeometry(0.08, 0.68, 0.65);
+        return g;
+      });
+
+      const topPaddle = new THREE.Mesh(paddleTBGeo, darkMat);
+      topPaddle.position.set(0, 0.94, 5.25);
+      topPaddle.rotation.x = -0.15;
+      const botPaddle = new THREE.Mesh(paddleTBGeo, darkMat);
+      botPaddle.position.set(0, -0.94, 5.25);
+      botPaddle.rotation.x = 0.15;
+
+      const leftPaddle = new THREE.Mesh(paddleLRGeo, darkMat);
+      leftPaddle.position.set(-0.94, 0, 5.25);
+      leftPaddle.rotation.y = 0.15;
+      const rightPaddle = new THREE.Mesh(paddleLRGeo, darkMat);
+      rightPaddle.position.set(0.94, 0, 5.25);
+      rightPaddle.rotation.y = -0.15;
+
+      airframeParts.push(topPaddle, botPaddle, leftPaddle, rightPaddle);
+
+      this.burner = new THREE.Mesh(geo('burner', () => {
+        const g = new THREE.ConeGeometry(0.8, 3.0, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.burnerMat);
+      this.burner.position.z = 5.6;
+      airframeParts.push(this.burner);
+
+    } else if (nozzleChoice === 'nozzle_twin') {
+      // Dual Twin-Afterburner Pods
+      const fairingBridge = new THREE.Mesh(geo('nozzle_twin_bridge', () => {
+        const g = new THREE.BoxGeometry(1.85, 0.85, 0.9);
+        return g;
+      }), bodyMat);
+      fairingBridge.position.set(0, 0, 4.45);
+      airframeParts.push(fairingBridge);
+
+      for (const sx of [-0.62, 0.62]) {
+        const cowl = new THREE.Mesh(geo('nozzle_twin_cowl', () => {
+          const g = new THREE.CylinderGeometry(0.48, 0.52, 0.9, 8);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), bodyMat);
+        cowl.position.set(sx, 0, 4.95);
+        airframeParts.push(cowl);
+
+        const innerNozzle = new THREE.Mesh(geo('nozzle_twin_inner', () => {
+          const g = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 8);
+          g.rotateX(Math.PI / 2);
+          return g;
+        }), darkMat);
+        innerNozzle.position.set(sx, 0, 5.2);
+        airframeParts.push(innerNozzle);
+      }
+
+      const twinBurnerGroup = new THREE.Group();
+      twinBurnerGroup.position.z = 5.6;
+      const twinFlameGeo = geo('burner_twin_flame', () => {
+        const g = new THREE.ConeGeometry(0.44, 2.8, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      });
+      const leftFlame = new THREE.Mesh(twinFlameGeo, this.burnerMat);
+      leftFlame.position.x = -0.62;
+      const rightFlame = new THREE.Mesh(twinFlameGeo, this.burnerMat);
+      rightFlame.position.x = 0.62;
+      twinBurnerGroup.add(leftFlame, rightFlame);
+
+      this.burner = twinBurnerGroup;
+      airframeParts.push(this.burner);
+
+    } else if (nozzleChoice === 'nozzle_aerospike') {
+      // Linear Aerospike Torus with center plug cone
+      const outerCowl = new THREE.Mesh(geo('nozzle_aerospike_cowl', () => {
+        const g = new THREE.CylinderGeometry(0.96, 1.0, 0.55, 10);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), bodyMat);
+      outerCowl.position.set(0, 0, 4.95);
+      airframeParts.push(outerCowl);
+
+      const annularThroat = new THREE.Mesh(geo('nozzle_aerospike_throat', () => {
+        const g = new THREE.CylinderGeometry(0.85, 0.85, 0.3, 10);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      annularThroat.position.set(0, 0, 5.0);
+      airframeParts.push(annularThroat);
+
+      const aerospikeRingMat = new THREE.MeshStandardMaterial({
+        color: 0xaa44ff,
+        emissive: 0xaa22ff,
+        emissiveIntensity: 2.6,
+        transparent: true,
+        opacity: 0.9,
+      });
+      this._disposables.push(aerospikeRingMat);
+
+      const plasmaRing = new THREE.Mesh(geo('nozzle_aerospike_ring', () => {
+        const g = new THREE.TorusGeometry(0.72, 0.05, 6, 16);
+        return g;
+      }), aerospikeRingMat);
+      plasmaRing.position.set(0, 0, 5.05);
+      airframeParts.push(plasmaRing);
+
+      const centerPlug = new THREE.Mesh(geo('nozzle_aerospike_plug', () => {
+        const g = new THREE.ConeGeometry(0.38, 1.7, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      centerPlug.position.set(0, 0, 5.75);
+      airframeParts.push(centerPlug);
+
+      this.burner = new THREE.Mesh(geo('burner_aerospike', () => {
+        const g = new THREE.ConeGeometry(0.74, 2.9, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.burnerMat);
+      this.burner.position.z = 5.8;
+      airframeParts.push(this.burner);
+
+    } else if (nozzleChoice === 'nozzle_stealth') {
+      // Serrated Stealth Chevrons
+      const shroud = new THREE.Mesh(geo('nozzle_stealth_shroud', () => {
+        const g = new THREE.CylinderGeometry(0.88, 0.98, 0.65, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      shroud.position.set(0, 0, 4.95);
+      airframeParts.push(shroud);
+
+      // Serrated 8-point chevron ring
+      const chevronMesh = new THREE.Mesh(geo('nozzle_stealth_chevrons', () => {
+        const shape = new THREE.Shape();
+        const chevrons = 8;
+        const rOuter = 0.94;
+        const rNotch = 0.78;
+        for (let i = 0; i < chevrons * 2; i++) {
+          const theta = (i / (chevrons * 2)) * Math.PI * 2;
+          const r = (i % 2 === 0) ? rOuter : rNotch;
+          const x = Math.cos(theta) * r;
+          const y = Math.sin(theta) * r;
+          if (i === 0) shape.moveTo(x, y);
+          else shape.lineTo(x, y);
+        }
+        shape.closePath();
+        const hole = new THREE.Path();
+        const rHole = 0.65;
+        for (let i = 0; i < 16; i++) {
+          const theta = (i / 16) * Math.PI * 2;
+          const x = Math.cos(theta) * rHole;
+          const y = Math.sin(theta) * rHole;
+          if (i === 0) hole.moveTo(x, y);
+          else hole.lineTo(x, y);
+        }
+        hole.closePath();
+        shape.holes.push(hole);
+        const g = new THREE.ExtrudeGeometry(shape, { depth: 0.35, bevelEnabled: false });
+        return g;
+      }), darkMat);
+      chevronMesh.position.set(0, 0, 5.05);
+      airframeParts.push(chevronMesh);
+
+      const goldLinerMat = new THREE.MeshStandardMaterial({
+        color: 0xffd700,
+        emissive: 0x664400,
+        emissiveIntensity: 0.8,
+        metalness: 0.95,
+        roughness: 0.15,
+      });
+      this._disposables.push(goldLinerMat);
+
+      const goldLiner = new THREE.Mesh(geo('nozzle_stealth_gold_liner', () => {
+        const g = new THREE.TorusGeometry(0.66, 0.045, 4, 16);
+        return g;
+      }), goldLinerMat);
+      goldLiner.position.set(0, 0, 5.08);
+      airframeParts.push(goldLiner);
+
+      this.burner = new THREE.Mesh(geo('burner', () => {
+        const g = new THREE.ConeGeometry(0.8, 3.0, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.burnerMat);
+      this.burner.position.z = 5.6;
+      airframeParts.push(this.burner);
+
+    } else if (nozzleChoice === 'nozzle_warp') {
+      // Hyperdrive Singularity Ring
+      const shroud = new THREE.Mesh(geo('nozzle_warp_shroud', () => {
+        const g = new THREE.CylinderGeometry(0.92, 0.96, 0.5, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), bodyMat);
+      shroud.position.set(0, 0, 4.95);
+      airframeParts.push(shroud);
+
+      const voidCore = new THREE.Mesh(geo('nozzle_warp_void', () => {
+        const g = new THREE.CylinderGeometry(0.72, 0.72, 0.4, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      voidCore.position.set(0, 0, 5.0);
+      airframeParts.push(voidCore);
+
+      const warpCyanMat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x00f0ff,
+        emissiveIntensity: 3.0,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      const warpMagentaMat = new THREE.MeshStandardMaterial({
+        color: 0xcc22ff,
+        emissive: 0xcc22ff,
+        emissiveIntensity: 3.0,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      this._disposables.push(warpCyanMat, warpMagentaMat);
+
+      const ring1 = new THREE.Mesh(geo('nozzle_warp_ring1', () => {
+        const g = new THREE.TorusGeometry(0.82, 0.045, 6, 20);
+        return g;
+      }), warpCyanMat);
+      ring1.position.set(0, 0, 5.15);
+
+      const ring2 = new THREE.Mesh(geo('nozzle_warp_ring2', () => {
+        const g = new THREE.TorusGeometry(0.68, 0.04, 6, 20);
+        return g;
+      }), warpMagentaMat);
+      ring2.position.set(0, 0, 5.45);
+
+      const ring3 = new THREE.Mesh(geo('nozzle_warp_ring3', () => {
+        const g = new THREE.TorusGeometry(0.52, 0.035, 6, 20);
+        return g;
+      }), warpCyanMat);
+      ring3.position.set(0, 0, 5.75);
+
+      this.warpRings = [ring1, ring2, ring3];
+      airframeParts.push(ring1, ring2, ring3);
+
+      // 4 Magnetic containment pylons
+      const pylonGeo = geo('nozzle_warp_pylon', () => {
+        const g = new THREE.BoxGeometry(0.06, 0.06, 1.0);
+        return g;
+      });
+      for (const [px, py] of [[0, 0.88], [0, -0.88], [0.88, 0], [-0.88, 0]]) {
+        const pylon = new THREE.Mesh(pylonGeo, darkMat);
+        pylon.position.set(px, py, 5.35);
+        airframeParts.push(pylon);
+      }
+
+      this.burner = new THREE.Mesh(geo('burner_warp', () => {
+        const g = new THREE.ConeGeometry(0.55, 2.6, 8);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.burnerMat);
+      this.burner.position.z = 5.8;
+      airframeParts.push(this.burner);
+
+    } else {
+      // nozzle_default: Titanium Iris Petals
+      const collar = new THREE.Mesh(geo('nozzle_iris_collar', () => {
+        const g = new THREE.CylinderGeometry(0.96, 0.98, 0.25, 12);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      collar.position.set(0, 0, 4.8);
+      airframeParts.push(collar);
+
+      const petals = new THREE.Mesh(geo('nozzle_iris_petals', () => {
+        const g = new THREE.CylinderGeometry(0.84, 0.94, 0.42, 12);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), darkMat);
+      petals.position.set(0, 0, 5.08);
+      airframeParts.push(petals);
+
+      const throatMat = new THREE.MeshStandardMaterial({
+        color: 0xff6622,
+        emissive: 0xff4400,
+        emissiveIntensity: 1.8,
+        roughness: 0.3,
+      });
+      this._disposables.push(throatMat);
+
+      const throat = new THREE.Mesh(geo('nozzle_iris_throat', () => {
+        const g = new THREE.TorusGeometry(0.76, 0.045, 4, 12);
+        return g;
+      }), throatMat);
+      throat.position.set(0, 0, 4.9);
+      airframeParts.push(throat);
+
+      this.burner = new THREE.Mesh(geo('burner', () => {
+        const g = new THREE.ConeGeometry(0.8, 3.0, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.burnerMat);
+      this.burner.position.z = 5.6;
+      airframeParts.push(this.burner);
+    }
 
     // Engine Air Intakes
     if (intakeChoice === 'intake_ramjet') {
@@ -1004,7 +1347,7 @@ export class Jet {
       this._disposables.push(wireMat);
       this.synthOverlay = new THREE.Group();
       for (const m of airframeParts) {
-        if (m === this.burner || m.geometry === geo('tip', () => new THREE.SphereGeometry(0.28, 6, 4))) continue;
+        if (m === this.burner || !m.geometry || m.geometry === geo('tip', () => new THREE.SphereGeometry(0.28, 6, 4))) continue;
         const wm = new THREE.Mesh(m.geometry, wireMat);
         wm.position.copy(m.position);
         wm.rotation.copy(m.rotation);
@@ -1191,7 +1534,12 @@ export class Jet {
     const s = 0.8 + boostAmt * 0.6 + superAmt * 0.9 + Math.sin(time * 40) * 0.12;
     this.burner.scale.set(1 + boostAmt * 0.3 + superAmt * 0.4, 1 + boostAmt * 0.3 + superAmt * 0.4, s);
     this.burnerMat.emissiveIntensity = 2.6 + boostAmt * 1.0 + superAmt * 1.4;
-    this.burnerMat.emissive.setHex(info.super ? 0x4ff1ff : 0xff9a2a);
+    this.burnerMat.emissive.setHex(info.super ? 0x4ff1ff : (this.burnerEmissiveHex || 0xff9a2a));
+    if (this.warpRings) {
+      this.warpRings[0].rotation.z += dt * 3.5;
+      this.warpRings[1].rotation.z -= dt * 4.2;
+      this.warpRings[2].rotation.z += dt * 5.0;
+    }
     this.shield.visible = Boolean(info.invuln);
     if (this.shield.visible) { this.shield.rotation.y += dt * 2; this.shield.rotation.x += dt * 1.3; }
     if (this.teamRing.visible) { this.teamRing.rotation.z += dt * 0.9; this.teamRingMat.emissiveIntensity = 1.8 + Math.sin(time * 4) * 0.6; }

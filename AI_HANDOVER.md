@@ -941,6 +941,25 @@
     * Selecting intake cosmetics dynamically updates the 3D turntable jet with optimal flank angle (`turntableYaw = 0.72, turntablePitch = 0.12`) and audio blip.
     * Added `.intake-tag` badge on lobby roster cards.
   - **Automated Tests:** Expanded `test/shop.test.js` asserting all 8 categories and procedural intake parameters. 51/51 tests pass.
+- **Procedural Engine Nozzle Cosmetics Engine (`shared/shop.js`, `public/js/entities.js`, `public/index.html`, `public/style.css`, `public/js/main.js`):**
+  - **Nozzle Category & Equipment Sync:** Added `nozzle` as the 9th cosmetic category in `SHOP_CATEGORIES` and `DEFAULT_EQUIPPED` (`nozzle_default`).
+  - **Procedural Nozzle Catalog (6 Styles):**
+    * Titanium Iris Petals (`nozzle_default`, 0 CR): articulated convergent-divergent titanium exhaust petals with heated throat ring.
+    * 3D Thrust-Vectoring Paddles (`nozzle_vector`, 400 CR): multi-axis rectangular thrust-vectoring paddles mounted around the nozzle rim with high-thrust flame.
+    * Dual Afterburner Pods (`nozzle_twin`, 650 CR): twin side-by-side exhaust cowls with dual synchronized high-thrust afterburner plumes.
+    * Linear Aerospike Torus (`nozzle_aerospike`, 900 CR): annular aerospike plug nozzle projecting an electric violet/cyan plasma cone with center spike needle.
+    * Serrated Stealth Chevrons (`nozzle_stealth`, 1200 CR): acoustic sawtooth chevron petals in radar-absorbent ceramic with gold heat-shield liner.
+    * Hyperdrive Singularity Ring (`nozzle_warp`, 1600 CR): concentric floating neon magnetic acceleration rings focusing a quantum ion jet with dynamic counter-rotation.
+  - **3D Procedural Mesh & Material Integration (`public/js/entities.js`):**
+    * Built unique mechanical cowls, throat chambers, and custom burner plumes for each nozzle style.
+    * Custom flame emissive colors (`this.burnerEmissiveHex`) per style (`0xff9a2a`, `0xff5511`, `0xff6600`, `0x8833ff`, `0xff7711`, `0x00eeff`), with cyan override during Super boost.
+    * Scalable twin flame group for `nozzle_twin` ensuring boost/super scales both plumes simultaneously.
+    * Continuous counter-rotating plasma containment rings for `nozzle_warp`.
+  - **Hangar UI Integration (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    * Added dedicated `Nozzles` touch tab in `#hangar-tabs`.
+    * Selecting nozzle cosmetics automatically rotates the 3D turntable jet to the rear 3/4 angle (`turntableYaw = 2.45, turntablePitch = 0.15`), fires afterburners (`previewBoostTimer = 3.5`), and plays audio blip.
+    * Added `.nozzle-tag` badge on lobby roster cards.
+  - **Automated Tests:** Expanded `test/shop.test.js` asserting all 9 categories and procedural nozzle parameters. 51/51 tests pass.
 
 ### Pending / Next Up
 - All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!
