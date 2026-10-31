@@ -1014,11 +1014,34 @@
   - **Smooth Proportional Speed Kinematics:** Integrated smooth speed scaling from cruise (`SPEED_BASE = 48`) to supersonic boost (`SPEED_BOOST = 85`), ensuring wings sweep back continuously when accelerating or boosting in-game and in the Hangar shop preview.
   - **Synchronized Wingtip Trailing FX:** `wingTipL` and `wingTipR` analytical coordinates track the swept wingtip positions identically with Three.js world transforms down to the millimeter, keeping wingtip lights and electric lightning contrail arcs perfectly attached during sweep.
 
+- **Sky Dreadnought Boss Raid Game Mode (`server.js`, `server/logic.js`, `leaderboard.js`, `public/js/entities.js`, `public/js/audio.js`, `public/index.html`, `public/style.css`, `public/js/main.js`, `test/boss.test.js`):**
+  - **First-Class Mode Integration:** Added `'boss'` to `MODES` across `leaderboard.js` and `server.js` (`MODES = ['crown', 'blitz', 'race', 'teams', 'boss']`), with dedicated leaderboard tracking, win recording upon boss defeat, and `#mode-toggle` / `#lb-tabs` UI buttons.
+  - **Server-Side Dreadnought Simulation & Combat Engine (`server.js`):**
+    * Multi-player HP scaling: base 500 HP + 100 HP per additional human pilot.
+    * Multi-phase state machine: Phase 1 (100%–50% HP) cruises archipelago orbit at 18 m/s with directed flak barrages; Phase 2 (<50% HP) enters Overdrive at 27 m/s, dropping high-velocity flak salvos and proximity sky mines.
+    * Damage models: rockets deal 4 HP on armored hull and 6 HP critical on ventral reactor core; sky mines deal 8 HP; high-speed ramming deals 5 HP.
+    * Power-up supply showers trigger at 75%, 50%, 25%, and 10% HP thresholds.
+    * Coordinated bot AI: Wingman bots dynamically acquire the Dreadnought, lead their shots with predictive intercept math, and boost into rocket launch cones.
+    * Defeat & assist rewards: +250 points and hit credit to the pilot landing the final blow; +100 assist points to all contributing pilots; clean round victory transition.
+    * Economy integration: awards `bossDefeatedBonus` (+50 Sky Credits) via `computeCreditPayout`.
+  - **100% Procedural 3D `DreadnoughtBoss` Class (`public/js/entities.js`):**
+    * Built entirely from Three.js primitives (zero external assets): armored naval prow, command bridge citadel with holographic sensors, port/starboard sponson flight decks, ducted contra-rotating turbine rotors, pulsing ventral plasma reactor core with counter-rotating containment rings, and twin defensive flak turrets with elevation/azimuth aiming.
+    * Real-time animations: turbine spin, core pulse, flak turret tracking, white hit flashing on damage, and multi-stage destruction cascading explosion chain.
+  - **Web Audio Boss Sound Synthesizer (`public/js/audio.js`):**
+    * `bossRaidHorn()`: deep brass dreadnought foghorn alerting pilots at raid start.
+    * `bossPhaseChange()`: rising multi-oscillator siren and resonance sweep for Overdrive.
+    * `bossHit(crit, vol)`: layered metallic impact thuds with resonant pitch-swept ping on core crits.
+    * `bossDefeat()`: triumphant multi-detonation sub-bass rumble cascade.
+  - **HUD & Off-Screen Tracking (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    * `#hud-boss-bar`: glassmorphic top boss bar with skull emblem, titan title, phase badge (`PHASE 1` / `⚠️ PHASE 2: OVERDRIVE`), numeric HP, and smooth animated gradient health fill bar.
+    * `#boss-arrow`: off-screen camera frustum tracker with pulsing crimson chevron and BOSS label pointing to the Dreadnought when outside camera view.
+    * Results screen displays "RAID VICTORY — DREADNOUGHT DESTROYED" or "TIME EXPIRED — MISSION FAILED" with boss damage breakdowns.
+  - **Automated Tests:** Added `test/boss.test.js` covering mode setup, HP scaling, damage types, phase thresholds, scoring, and credit payouts. All 57 tests passing (100%).
+
 ### Pending / Next Up
-- All 11 cosmetic categories in the Sky Credits & Procedural Cosmetic Shop engine are complete!
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
 - Optional future enhancements:
-  * Additional procedural finish shaders or animated particle styles.
-  * Additional party sponsor modifiers (e.g. low-gravity floating isles, mirror course).
+  * Additional party sponsor modifiers or boss raid variants.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
 
 ### Notes / Warnings

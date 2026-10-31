@@ -85,6 +85,7 @@
               <button data-lbmode="blitz">Balloon Blitz</button>
               <button data-lbmode="race">Race</button>
               <button data-lbmode="teams">Red vs Blue</button>
+              <button data-lbmode="boss">Boss Raid</button>
             </div>
             <table id="lb-table" class="lb-table">
               <thead><tr><th>#</th><th>Pilot</th><th title="Wins">W</th><th title="Best score">Best</th><th title="Rounds">Rnd</th></tr></thead>
@@ -134,6 +135,7 @@
                   <button data-mode="blitz">Arch &amp; Balloon Blitz</button>
                   <button data-mode="race">Checkpoint Race</button>
                   <button data-mode="teams">Red vs Blue</button>
+                  <button data-mode="boss">Boss Raid</button>
                 </div>
               </label>
               <label>Time of day
@@ -170,6 +172,18 @@
       <div class="glass hud-pill" id="hud-weather">☀️ CLEAR</div>
       <div class="glass hud-pill event-pill hidden" id="hud-event"><span id="hud-event-text"></span><span class="event-hp hidden" id="hud-event-hp"><span id="hud-event-hp-fill"></span></span></div>
     </div>
+    <!-- Boss Raid HUD Bar -->
+    <div class="hud-boss-bar glass hidden" id="hud-boss-bar">
+      <div class="boss-bar-header">
+        <span class="boss-skull">☠️</span>
+        <span class="boss-title" id="boss-title">SKY DREADNOUGHT // AEGIS TITAN</span>
+        <span class="boss-phase-badge" id="boss-phase-badge">PHASE 1</span>
+        <span class="boss-hp-numbers" id="boss-hp-numbers">500 / 500 HP</span>
+      </div>
+      <div class="boss-track">
+        <div class="boss-fill" id="boss-hp-fill"></div>
+      </div>
+    </div>
     <div class="hud-left glass">
       <div class="hud-identity"><canvas id="hud-portrait" width="44" height="44"></canvas><div><div class="hud-name" id="hud-name">—</div><div class="hud-callsign" id="hud-callsign">—</div></div></div>
       <div class="hud-score"><span id="hud-score">0</span> pts</div>
@@ -183,6 +197,7 @@
     <div id="hud-stunts"></div>
     <div id="hud-banner" class="hidden"></div>
     <div id="crown-arrow" class="hidden">▲</div>
+    <div id="boss-arrow" class="boss-arrow hidden"><div class="boss-arrow-chevron">▲</div><div class="boss-arrow-label">BOSS</div></div>
     <!-- Missile Warning System -->
     <div id="threat-vignette" class="threat-vignette hidden"></div>
     <div id="missile-arrow" class="missile-arrow hidden"><div class="missile-arrow-chevron">▲</div><div class="missile-arrow-label" id="missile-arrow-label">MISSILE</div></div>

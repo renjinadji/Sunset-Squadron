@@ -101,7 +101,17 @@ const BOT_CROWN_EMOTES = ['👑', '😎', '🎉'];
 const BOT_NAMES = ['Wingman Ace', 'Wingman Duke', 'Wingman Pip', 'Wingman Zed'];
 const leaderboard = new Leaderboard();
 const PRESETS = ['sunset', 'noon', 'twilight'];
-const MODES = ['crown', 'blitz', 'race', 'teams'];
+const MODES = ['crown', 'blitz', 'race', 'teams', 'boss'];
+
+// Boss Raid Mode
+const BOSS_BASE_HP = 500;            // Base Dreadnought HP (scales +100 per additional human player)
+const BOSS_COLLISION_R = 36;         // Hitbox radius for rocket / mine collisions
+const BOSS_CORE_R = 14;              // Critical weak-point radius
+const BOSS_RAM_SPEED = 24;           // Min speed to damage boss by ramming
+const BOSS_SPEED_PHASE1 = 18;        // Cruise speed in phase 1
+const BOSS_SPEED_PHASE2 = 27;        // Accelerated speed in phase 2 enrage
+const BOSS_FLAK_INTERVAL_P1 = 4.0;   // Seconds between flak salvoes in phase 1
+const BOSS_FLAK_INTERVAL_P2 = 2.2;   // Faster flak salvoes in phase 2
 
 // Red vs Blue team mode
 const TEAMS = ['red', 'blue'];
@@ -290,6 +300,7 @@ const state = {
   eventFired: false,            // one event per round: blocks re-activation after it ends
   goldBalloon: null,            // balloonRush: { x, y, z, hp, maxHp, alive }
   blimp: null,                  // blimp event: { hp, maxHp, pos, dir, seed, speed, radius, y, startAng, orbitDir, drops, dropIdx, alive }
+  boss: null,                   // boss raid mode: { alive, hp, maxHp, phase, enraged, pos, dir, yaw, pitch, roll, orbitRadius, orbitSpeed, orbitAngle, altitude, altitudePhase, lastFlakAt, damageMap }
   meteors: [],                  // meteorShower: [{ id, p, v, born, awarded }]
   meteorSeq: 1,
   meteorSpawned: 0,
@@ -920,6 +931,7 @@ function detachPlayer(player) {
     state.event = null;
     state.goldBalloon = null;
     state.blimp = null;
+    state.boss = null;
     state.meteors = [];
     state.roundSponsor = null;
   }
@@ -939,6 +951,7 @@ function roundStartPayload() {
     ...(state.teamCrowns ? { crowns: { red: { h: state.teamCrowns.red.holderId, pos: state.teamCrowns.red.pos }, blue: { h: state.teamCrowns.blue.holderId, pos: state.teamCrowns.blue.pos } } } : {}),
     pickups: state.pickups.map(pickupPublic),
     course: state.race ? { gates: state.race.course.map((g) => ({ id: g.id, x: r2(g.x), y: r2(g.y), z: r2(g.z), yaw: r3(g.yaw), gateR: g.gateR })), total: state.race.course.length } : null,
+    boss: (state.settings.mode === 'boss' && state.boss) ? { hp: state.boss.hp, maxHp: state.boss.maxHp, name: 'Sky Dreadnought' } : null,
     activeRoundSponsor: state.roundSponsor || null,
     roundSponsor: state.roundSponsor || null,
     players: [...state.players.values()].map((p) => ({
@@ -1013,6 +1026,32 @@ function startRound() {
   state.decoys = [];
   state.crown = { holderId: null, pos: { x: 0, y: 95, z: 0 }, ribbon: [] };
   state.race = state.settings.mode === 'race' ? { course: generateCourse(state.seed, state.layout), finishCount: 0 } : null;
+  if (state.settings.mode === 'boss') {
+    const numHumans = humans().length;
+    const maxHp = BOSS_BASE_HP + Math.max(0, numHumans - 1) * 100;
+    state.boss = {
+      alive: true,
+      hp: maxHp,
+      maxHp: maxHp,
+      phase: 1,
+      enraged: false,
+      pos: { x: 0, y: 135, z: 0 },
+      dir: { x: 0, y: 0, z: -1 },
+      yaw: 0,
+      pitch: 0,
+      roll: 0,
+      orbitRadius: 280,
+      orbitSpeed: BOSS_SPEED_PHASE1,
+      orbitAngle: 0,
+      altitude: 135,
+      altitudePhase: 0,
+      lastFlakAt: 0,
+      damageMap: {},
+      flakSeq: 1,
+    };
+  } else {
+    state.boss = null;
+  }
   state.balloons = state.layout.balloons.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, tint: b.tint, alive: true, respawnAt: 0 }));
   spawnPickups();
   state.phase = 'playing';
@@ -1061,6 +1100,7 @@ function endRound() {
   endEvent();   // drop any active mid-round event (clients hide the pill)
   const mode = state.settings.mode;
   const isRace = mode === 'race';
+  const bossDefeated = mode === 'boss' && Boolean(state.boss && state.boss.hp <= 0);
   const results = [...state.players.values()]
     .map((p) => ({
       id: p.id, name: p.name, pilot: p.pilot, isBot: p.isBot, score: Math.round(p.score),
@@ -1069,6 +1109,7 @@ function endRound() {
       roundStylePoints: Math.round(p.roundStylePoints || 0),
       eventParticipated: Boolean(p.eventParticipated),
       creditBreakdown: null,
+      bossDamage: (mode === 'boss' && state.boss) ? Math.round(state.boss.damageMap[p.id] || 0) : 0,
       ...(p.team ? { team: p.team } : {}),
       stats: { balloons: p.stats.balloons, hits: p.stats.hits, crownTime: Math.round(p.stats.crownTime), pickups: p.stats.pickups },
       race: {
@@ -1094,7 +1135,7 @@ function endRound() {
   // Humans only on the persistent leaderboard
   const humanRows = results.filter((r) => !r.isBot).map((r) => ({
     name: r.name, pilot: r.pilot, score: r.score,
-    won: mode === 'teams' ? r.team === winnerTeam : r.id === winnerId,
+    won: mode === 'teams' ? r.team === winnerTeam : (mode === 'boss' ? bossDefeated : r.id === winnerId),
     points: mode === 'crown' ? r.stats.crownTime : r.score,
     balloons: r.stats.balloons, hits: r.stats.hits,
   }));
@@ -1118,6 +1159,7 @@ function endRound() {
         rankIndex: i,
         totalPlayers: results.length,
         sponsorId: state.roundSponsor ? state.roundSponsor.id : null,
+        bossDefeated,
       });
       const updatedWallet = leaderboard.awardCredits(r.name, payout.totalEarned);
       const newBalance = updatedWallet ? updatedWallet.credits : payout.totalEarned;
@@ -1136,6 +1178,7 @@ function endRound() {
     results,
     endedAt: state.endedAt,
     winnerId,
+    bossDefeated,
     leaderboard: leaderboard.summary(10),
     activeRoundSponsor: state.roundSponsor || null,
     roundSponsor: state.roundSponsor || null,
@@ -1159,6 +1202,7 @@ function returnToLobby() {
   state.event = null;
   state.goldBalloon = null;
   state.blimp = null;
+  state.boss = null;
   state.meteors = [];
   state.crown = { holderId: null, pos: { x: 0, y: 95, z: 0 }, ribbon: [] };
   state.roundSponsor = null;
@@ -1563,6 +1607,9 @@ function findHomingTarget(r, t) {
   if (state.blimp && state.blimp.alive) {
     consider(state.blimp.pos, 'blimp', 'blimp');
   }
+  if (state.settings.mode === 'boss' && state.boss && state.boss.alive) {
+    consider(state.boss.pos, 'boss', 'boss');
+  }
   return best;
 }
 
@@ -1588,6 +1635,7 @@ function stepRockets(dt, t) {
       if (r.targetKind === 'player') { const tp = state.players.get(r.target); if (tp) curD = dist(tp.pos, r.p); }
       else if (r.targetKind === 'balloon') { const b = state.balloons[r.target]; if (b) curD = dist(b, r.p); }
       else if (r.targetKind === 'blimp') { if (state.blimp && state.blimp.alive) curD = dist(state.blimp.pos, r.p); }
+      else if (r.targetKind === 'boss') { if (state.boss && state.boss.alive) curD = dist(state.boss.pos, r.p); }
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
         const dd = dist(dec.p, r.p);
@@ -1607,6 +1655,7 @@ function stepRockets(dt, t) {
       if (r.targetKind === 'player') { const tp = state.players.get(r.target); tpos = tp ? tp.pos : null; }
       else if (r.targetKind === 'decoy') { const dec = state.decoys.find((d) => d.id === r.target); tpos = dec ? dec.p : null; }
       else if (r.targetKind === 'blimp') { tpos = state.blimp && state.blimp.alive ? state.blimp.pos : null; }
+      else if (r.targetKind === 'boss') { tpos = state.boss && state.boss.alive ? state.boss.pos : null; }
       else { const b = state.balloons[r.target]; tpos = b && b.alive ? b : null; }
       if (!tpos) { r.target = null; }
       else {
@@ -1713,6 +1762,13 @@ function stepRockets(dt, t) {
       dead = true;
       damageBlimp(4, r.owner, t, r.p);
     }
+    // Sky Dreadnought: rocket hit deals 4 hp (or 6 hp crit on reactor core) in Boss Raid
+    if (!dead && state.boss && state.boss.alive && dist(state.boss.pos, r.p) < BOSS_COLLISION_R) {
+      dead = true;
+      const isCrit = dist(state.boss.pos, r.p) < BOSS_CORE_R;
+      const dmg = isCrit ? 6 : 4;
+      damageBoss(dmg, r.owner, t, r.p, isCrit);
+    }
     if (!dead && islandCollision(r.p, state.layout.islands)) {
       dead = true;
       io.emit('boom', { p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)] });
@@ -1735,6 +1791,11 @@ function stepMines(dt, t) {
       if (state.blimp && state.blimp.alive && dist(m.p, state.blimp.pos) < BLIMP_COLLISION_R + 6) {
         dead = true;
         damageBlimp(6, m.owner, t, m.p);
+        io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
+      }
+      if (!dead && state.boss && state.boss.alive && dist(m.p, state.boss.pos) < BOSS_COLLISION_R + 8) {
+        dead = true;
+        damageBoss(8, m.owner, t, m.p, true);
         io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
       }
       if (!dead) for (const p of state.players.values()) {
@@ -1857,6 +1918,15 @@ function stepGatesAndPickups(t) {
         p.lastBlimpRamAt = t;
         p.tumbleUntil = t + TUMBLE_TIME * 0.5 * p.perk.tumble;
         damageBlimp(3, p.id, t, p.pos);
+      }
+    }
+    // Sky Dreadnought ramming (deals 5 damage to boss, tumbles the pilot slightly)
+    const boss = state.boss;
+    if (boss && boss.alive && p.speed > BOSS_RAM_SPEED && dist(boss.pos, p.pos) < reach(p, BOSS_COLLISION_R, t)) {
+      if (t - (p.lastBossRamAt || 0) >= 1.0) {
+        p.lastBossRamAt = t;
+        p.tumbleUntil = t + TUMBLE_TIME * 0.6 * p.perk.tumble;
+        damageBoss(5, p.id, t, p.pos, false);
       }
     }
     // Power-up orbs (all modes)
@@ -2112,6 +2182,139 @@ function killBlimp(winnerId, t) {
   endEvent();
 }
 
+/** Rocket, mine, or ram damage on the Sky Dreadnought in Boss Raid mode. */
+function damageBoss(amount, byId, t, hitPos, isCrit) {
+  const boss = state.boss;
+  if (!boss || !boss.alive) return;
+  const shooter = state.players.get(byId);
+  if (shooter) {
+    if (!shooter.isBot) shooter.eventParticipated = true;
+    awardPoints(shooter, amount * 10, t);
+    shooter.stats.hits++;
+  }
+  const oldHp = boss.hp;
+  boss.hp = Math.max(0, boss.hp - amount);
+  boss.damageMap[byId] = (boss.damageMap[byId] || 0) + amount;
+  const pos = hitPos || boss.pos;
+
+  io.emit('bossHit', {
+    p: [r2(pos.x), r2(pos.y), r2(pos.z)],
+    hp: boss.hp,
+    maxHp: boss.maxHp,
+    amount,
+    by: byId,
+    crit: Boolean(isCrit),
+  });
+
+  // Threshold power-up showers:
+  for (const pct of [0.75, 0.5, 0.25, 0.1]) {
+    const thresh = Math.round(boss.maxHp * pct);
+    if (oldHp > thresh && boss.hp <= thresh) {
+      spawnPickupShower(boss.pos);
+    }
+  }
+
+  // Phase transition: at 50% HP, enter Phase 2 Overdrive
+  if (boss.phase === 1 && boss.hp <= Math.round(boss.maxHp * 0.5)) {
+    boss.phase = 2;
+    boss.enraged = true;
+    boss.orbitSpeed = BOSS_SPEED_PHASE2;
+    io.emit('bossPhase', { phase: 2, hp: boss.hp, maxHp: boss.maxHp });
+    console.log(`[boss] Sky Dreadnought entered Phase 2 (Overdrive)! HP=${boss.hp}/${boss.maxHp}`);
+  }
+
+  if (boss.hp <= 0) {
+    killBoss(byId, t);
+  }
+}
+
+function killBoss(killerId, t) {
+  const boss = state.boss;
+  if (!boss || !boss.alive) return;
+  boss.alive = false;
+  let pts = 250;
+  const killer = state.players.get(killerId);
+  if (killer) {
+    pts = awardPoints(killer, 250, t);
+    killer.stats.hits++;
+  }
+  // Assist points: every participant who dealt damage gets +100 bonus points
+  for (const [pid, dmg] of Object.entries(boss.damageMap)) {
+    if (pid !== killerId && dmg > 0) {
+      const helper = state.players.get(pid);
+      if (helper) awardPoints(helper, 100, t);
+    }
+  }
+  const pos = [r2(boss.pos.x), r2(boss.pos.y), r2(boss.pos.z)];
+  io.emit('bossDown', { by: killerId, points: Math.round(pts), p: pos });
+  console.log(`[boss] Sky Dreadnought downed by ${killer ? killer.name : killerId}!`);
+  spawnPickupShower(boss.pos);
+  setTimeout(() => {
+    if (state.phase === 'playing') endRound();
+  }, 2400);
+}
+
+function stepBossRaid(dt, t) {
+  const boss = state.boss;
+  if (!boss || !boss.alive) return;
+
+  // Orbit path around the archipelago
+  boss.orbitAngle += (boss.orbitSpeed / boss.orbitRadius) * dt;
+  boss.altitudePhase += dt * 0.35;
+  const targetX = Math.cos(boss.orbitAngle) * boss.orbitRadius;
+  const targetZ = Math.sin(boss.orbitAngle) * boss.orbitRadius;
+  const targetY = boss.altitude + Math.sin(boss.altitudePhase) * 22;
+
+  // Tangent direction for flight heading
+  const dirX = -Math.sin(boss.orbitAngle);
+  const dirZ = Math.cos(boss.orbitAngle);
+  boss.pos.x = targetX;
+  boss.pos.y = targetY;
+  boss.pos.z = targetZ;
+  boss.dir.x = dirX;
+  boss.dir.y = 0;
+  boss.dir.z = dirZ;
+  boss.yaw = Math.atan2(-dirX, -dirZ);
+
+  // Defensive Flak / Ordnance
+  const flakInterval = boss.phase === 2 ? BOSS_FLAK_INTERVAL_P2 : BOSS_FLAK_INTERVAL_P1;
+  if (t - boss.lastFlakAt >= flakInterval) {
+    boss.lastFlakAt = t;
+    let nearest = null, nd = Infinity;
+    for (const p of state.players.values()) {
+      if (p.gone) continue;
+      const d = dist(p.pos, boss.pos);
+      if (d < 380 && d < nd) { nd = d; nearest = p; }
+    }
+    let flakVel = { x: 0, y: -20, z: 0 };
+    if (nearest) {
+      const toP = vnorm(vsub(nearest.pos, boss.pos));
+      flakVel = vscale(toP, boss.phase === 2 ? 40 : 28);
+    } else {
+      flakVel = { x: (Math.random() - 0.5) * 30, y: -25, z: (Math.random() - 0.5) * 30 };
+    }
+    state.meteors.push({
+      id: state.meteorSeq++,
+      p: { x: boss.pos.x, y: boss.pos.y - 6, z: boss.pos.z },
+      v: flakVel,
+      born: t,
+      isBomb: true,
+      isFlak: true,
+      awarded: {},
+    });
+
+    if (boss.phase === 2 && Math.random() < 0.45 && state.mines.length < 12) {
+      state.mines.push({
+        id: state.mineSeq++,
+        owner: 'boss',
+        p: { x: boss.pos.x - dirX * 18, y: boss.pos.y - 4, z: boss.pos.z - dirZ * 18 },
+        born: t,
+        armAt: t + 0.8,
+      });
+    }
+  }
+}
+
 /** Golden balloon burst: +50 and a flat 10s Score x2 to the popper, then the event ends. */
 function popGoldBalloon(winnerId, t) {
   const gb = state.goldBalloon;
@@ -2171,8 +2374,10 @@ function stepBlimp(dt, t) {
 /** Meteor Shower: spawn the seeded schedule, integrate, jet hits + close shaves. */
 function stepMeteors(dt, t) {
   const ev = state.event;
-  if (!ev || (ev.type !== 'meteorShower' && ev.type !== 'blimp')) return;
-  if (ev.type === 'meteorShower') {
+  const isBoss = state.settings.mode === 'boss';
+  if (!ev && !isBoss) return;
+  if (ev && ev.type !== 'meteorShower' && ev.type !== 'blimp' && !isBoss) return;
+  if (ev && ev.type === 'meteorShower') {
     const elapsed = t - ev.startedAt;
     const defs = ev.data.meteors;
     const want = Math.min(ev.data.count, Math.floor(elapsed / ev.data.interval) + 1);
@@ -2346,6 +2551,9 @@ function stepBot(p, dt, t) {
         }
       }
       bs.targetId = best;
+    } else if (mode === 'boss') {
+      bs.targetId = 'boss';
+      bs.target = null;
     } else {
       // Blitz: nearest balloon, or occasionally an arch for the super-charge
       let best = null, bestD = Infinity;
@@ -2399,6 +2607,17 @@ function stepBot(p, dt, t) {
     const toB = vnorm(vsub(state.blimp.pos, p.pos));
     const fwd = forwardFromYP(p.yaw, p.pitch);
     if (d < 240 && vdot(toB, fwd) > Math.cos(HOMING_CONE * 0.8)) wantFire = true;
+  } else if ((bs.targetId === 'boss' || mode === 'boss') && state.boss && state.boss.alive) {
+    const boss = state.boss;
+    const d = dist(boss.pos, p.pos);
+    const tVel = vscale(boss.dir, boss.orbitSpeed);
+    const tHit = clamp(d / ROCKET_SPEED, 0, 1.5);
+    const leadPos = vadd(boss.pos, vscale(tVel, tHit));
+    goal = leadPos;
+    wantBoost = d > 160 && p.stamina > 0.35;
+    const toLead = vnorm(vsub(leadPos, p.pos));
+    const fwd = forwardFromYP(p.yaw, p.pitch);
+    if (d < 260 && vdot(toLead, fwd) > Math.cos(HOMING_CONE * 0.8)) wantFire = true;
   } else if (mode === 'crown' || mode === 'teams') {
     if (bs.targetId === 'flee') {
       // Crown-holders evade: boost away from nearest threat (pursuer or incoming rocket)
@@ -2634,6 +2853,17 @@ function snapshot(t) {
         ...(state.event.type === 'blimp' && state.blimp ? { hp: state.blimp.hp, mh: state.blimp.maxHp, p: [r2(state.blimp.pos.x), r2(state.blimp.pos.y), r2(state.blimp.pos.z)], yaw: r3(state.blimp.yaw) } : {}),
       }
     } : {}),
+    ...(state.settings.mode === 'boss' && state.boss ? {
+      boss: {
+        hp: state.boss.hp,
+        mh: state.boss.maxHp,
+        p: [r2(state.boss.pos.x), r2(state.boss.pos.y), r2(state.boss.pos.z)],
+        yaw: r3(state.boss.yaw),
+        ph: state.boss.phase,
+        enr: state.boss.enraged ? 1 : 0,
+        al: state.boss.alive ? 1 : 0,
+      }
+    } : {}),
     meteors: state.meteors.map((m) => ({ id: m.id, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] })),
   };
 }
@@ -2645,6 +2875,7 @@ function tick() {
   if (state.phase === 'playing') {
     for (const b of bots()) stepBot(b, dt, t);
     stepEvent(dt, t);
+    if (state.settings.mode === 'boss') stepBossRaid(dt, t);
     stepRockets(dt, t);
     stepMines(dt, t);
     stepDecoys(dt, t);

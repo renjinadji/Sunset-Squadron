@@ -3075,3 +3075,270 @@ export class Blimp {
     this.beaconMat.dispose();
   }
 }
+
+// ===========================================================================
+// DreadnoughtBoss (Sky Dreadnought Titan - Boss Raid Mode)
+// 100% Procedural Zero-Asset Heavy Aerial Fortress
+// ===========================================================================
+export class DreadnoughtBoss {
+  constructor() {
+    this.group = new THREE.Group();
+    this.disposables = [];
+
+    this.armorMat = new THREE.MeshStandardMaterial({
+      color: 0x24222c,
+      roughness: 0.35,
+      metalness: 0.85,
+      flatShading: true,
+    });
+    this.plateMat = new THREE.MeshStandardMaterial({
+      color: 0x3d394b,
+      roughness: 0.45,
+      metalness: 0.75,
+      flatShading: true,
+    });
+    this.accentMat = new THREE.MeshStandardMaterial({
+      color: 0xe59f1c,
+      roughness: 0.25,
+      metalness: 0.88,
+    });
+    this.coreMat = new THREE.MeshStandardMaterial({
+      color: 0x00f0ff,
+      emissive: 0x00f0ff,
+      emissiveIntensity: 3.0,
+      transparent: true,
+      opacity: 0.92,
+    });
+    this.bridgeMat = new THREE.MeshStandardMaterial({
+      color: 0x4ff1ff,
+      emissive: 0x4ff1ff,
+      emissiveIntensity: 3.5,
+    });
+    this.turretMat = new THREE.MeshStandardMaterial({
+      color: 0x18161e,
+      roughness: 0.25,
+      metalness: 0.9,
+    });
+    this.exhaustMat = new THREE.MeshStandardMaterial({
+      color: 0xff8811,
+      emissive: 0xff4400,
+      emissiveIntensity: 3.2,
+    });
+
+    this.disposables.push(
+      this.armorMat, this.plateMat, this.accentMat,
+      this.coreMat, this.bridgeMat, this.turretMat, this.exhaustMat
+    );
+
+    // 1. Central Armored Hull
+    const mainHull = new THREE.Mesh(geo('bossMainHull', () => new THREE.BoxGeometry(16, 9.5, 42)), this.armorMat);
+    mainHull.castShadow = true;
+    this.group.add(mainHull);
+
+    // Forward Wedge / Armored Ram Prow
+    const prow = new THREE.Mesh(geo('bossProw', () => {
+      const g = new THREE.ConeGeometry(9.5, 18, 5);
+      g.rotateX(-Math.PI / 2);
+      g.scale(1.15, 0.65, 1.0);
+      return g;
+    }), this.plateMat);
+    prow.position.set(0, 0, -29);
+    prow.castShadow = true;
+    this.group.add(prow);
+
+    // Reinforced Prow Ram Horn
+    const horn = new THREE.Mesh(geo('bossHorn', () => {
+      const g = new THREE.ConeGeometry(3.2, 8, 4);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), this.accentMat);
+    horn.position.set(0, 0, -39);
+    this.group.add(horn);
+
+    // Rear Engine Housing
+    const stern = new THREE.Mesh(geo('bossStern', () => new THREE.BoxGeometry(20, 10.5, 12)), this.plateMat);
+    stern.position.set(0, 0.5, 23);
+    this.group.add(stern);
+
+    // 2. Lateral Sponson Wings / Flight Decks
+    const sponsonGeo = geo('bossSponson', () => new THREE.BoxGeometry(7.5, 2.8, 28));
+    for (const sx of [-12.5, 12.5]) {
+      const sp = new THREE.Mesh(sponsonGeo, this.plateMat);
+      sp.position.set(sx, -0.8, -1);
+      const trim = new THREE.Mesh(geo('bossSpTrim', () => new THREE.BoxGeometry(0.6, 2.9, 28)), this.accentMat);
+      trim.position.set(sx > 0 ? 3.8 : -3.8, 0, 0);
+      sp.add(trim);
+      this.group.add(sp);
+    }
+
+    // 3. Command Bridge Citadel
+    const citadel = new THREE.Mesh(geo('bossCitadel', () => new THREE.BoxGeometry(7, 5.5, 14)), this.armorMat);
+    citadel.position.set(0, 7.2, -4);
+    const bridge = new THREE.Mesh(geo('bossBridge', () => new THREE.BoxGeometry(5.4, 2.2, 6)), this.plateMat);
+    bridge.position.set(0, 10.5, -6);
+    const visor = new THREE.Mesh(geo('bossVisor', () => new THREE.BoxGeometry(5.6, 0.9, 2)), this.bridgeMat);
+    visor.position.set(0, 10.5, -8.6);
+    this.group.add(citadel, bridge, visor);
+
+    // Sensor Mast & Warning Beacon
+    const mast = new THREE.Mesh(geo('bossMast', () => new THREE.CylinderGeometry(0.3, 0.5, 6, 6)), this.turretMat);
+    mast.position.set(0, 14, -4);
+    const beacon = new THREE.Mesh(geo('bossBeacon', () => new THREE.SphereGeometry(0.7, 6, 4)), this.bridgeMat);
+    beacon.position.set(0, 17, -4);
+    this.group.add(mast, beacon);
+
+    // 4. Heavy Ducted Propulsion Turbines & Spinning Rotors
+    this.rotors = [];
+    this.exhaustCones = [];
+    const turbineGeo = geo('bossTurbine', () => {
+      const g = new THREE.CylinderGeometry(4.4, 4.2, 13, 12);
+      g.rotateX(Math.PI / 2);
+      return g;
+    });
+    const rotorBladeGeo = geo('bossRotorBlade', () => new THREE.BoxGeometry(0.5, 7.2, 0.2));
+    const exhaustGeo = geo('bossExhaust', () => {
+      const g = new THREE.ConeGeometry(3.6, 4.5, 10);
+      g.rotateX(Math.PI / 2);
+      return g;
+    });
+
+    for (const sx of [-16, 16]) {
+      const pylon = new THREE.Mesh(geo('bossPylon', () => new THREE.BoxGeometry(4.5, 1.4, 6)), this.plateMat);
+      pylon.position.set(sx * 0.72, 1, 14);
+      const nacelle = new THREE.Mesh(turbineGeo, this.armorMat);
+      nacelle.position.set(sx, 1, 14);
+
+      // Intake rotor group
+      const rotorGroup = new THREE.Group();
+      rotorGroup.position.set(sx, 1, 7.8);
+      for (let ang = 0; ang < Math.PI; ang += Math.PI / 3) {
+        const blade = new THREE.Mesh(rotorBladeGeo, this.accentMat);
+        blade.rotation.z = ang;
+        rotorGroup.add(blade);
+      }
+      this.rotors.push(rotorGroup);
+
+      // Exhaust cone
+      const exh = new THREE.Mesh(exhaustGeo, this.exhaustMat);
+      exh.position.set(sx, 1, 22.5);
+      this.exhaustCones.push(exh);
+
+      this.group.add(pylon, nacelle, rotorGroup, exh);
+    }
+
+    // 5. Ventral Plasma Reactor Core (Weak-Point)
+    this.coreGroup = new THREE.Group();
+    this.coreGroup.position.set(0, -5.5, -2);
+    const coreSphere = new THREE.Mesh(geo('bossCoreSphere', () => new THREE.SphereGeometry(3.6, 14, 10)), this.coreMat);
+    this.ring1 = new THREE.Mesh(geo('bossCoreRing1', () => new THREE.TorusGeometry(4.6, 0.45, 6, 20)), this.accentMat);
+    this.ring2 = new THREE.Mesh(geo('bossCoreRing2', () => new THREE.TorusGeometry(4.6, 0.45, 6, 20)), this.accentMat);
+    this.coreGroup.add(coreSphere, this.ring1, this.ring2);
+    this.group.add(this.coreGroup);
+
+    // 6. Dual Dorsal Flak Turrets
+    this.turrets = [];
+    const turretBaseGeo = geo('bossTurretBase', () => new THREE.CylinderGeometry(2.4, 2.8, 1.4, 8));
+    const barrelGeo = geo('bossBarrel', () => {
+      const g = new THREE.CylinderGeometry(0.35, 0.35, 5.5, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    });
+    for (const [tz, ty] of [[-13, 5.4], [10, 5.9]]) {
+      const tGroup = new THREE.Group();
+      tGroup.position.set(0, ty, tz);
+      const base = new THREE.Mesh(turretBaseGeo, this.turretMat);
+      const bL = new THREE.Mesh(barrelGeo, this.turretMat);
+      bL.position.set(-0.8, 0.8, -2.4);
+      const bR = new THREE.Mesh(barrelGeo, this.turretMat);
+      bR.position.set(0.8, 0.8, -2.4);
+      tGroup.add(base, bL, bR);
+      this.turrets.push(tGroup);
+      this.group.add(tGroup);
+    }
+
+    this.hitTimer = 0;
+    this.smokeTimer = 0;
+    this.phase = 1;
+    this.enraged = false;
+    this.destroyed = false;
+  }
+
+  flashHit() {
+    this.hitTimer = 0.14;
+    this.armorMat.emissive.setHex(0xff3344);
+    this.armorMat.emissiveIntensity = 2.4;
+  }
+
+  setPhase(phase) {
+    this.phase = phase;
+    if (phase === 2) {
+      this.enraged = true;
+      this.coreMat.color.setHex(0xff2200);
+      this.coreMat.emissive.setHex(0xff2200);
+      this.exhaustMat.emissive.setHex(0xff0022);
+    }
+  }
+
+  update(dt, t, particles) {
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) {
+        this.armorMat.emissive.setHex(0x000000);
+        this.armorMat.emissiveIntensity = 0;
+      }
+    }
+
+    // Rotors spin
+    const spinSpd = this.enraged ? 28 : 18;
+    if (this.rotors[0]) this.rotors[0].rotation.z += dt * spinSpd;
+    if (this.rotors[1]) this.rotors[1].rotation.z -= dt * spinSpd;
+
+    // Reactor core pulse and magnetic ring spin
+    const pulseFreq = this.enraged ? 14 : 6;
+    const pulseAmt = this.enraged ? 1.6 : 0.8;
+    this.coreMat.emissiveIntensity = 2.4 + Math.sin(t * pulseFreq) * pulseAmt;
+    if (this.ring1) this.ring1.rotation.y += dt * 3.0;
+    if (this.ring2) this.ring2.rotation.x += dt * 3.5;
+
+    // Turret scanning
+    if (this.turrets[0]) this.turrets[0].rotation.y = Math.sin(t * 1.8) * 0.45;
+    if (this.turrets[1]) this.turrets[1].rotation.y = Math.sin(t * 1.5 + 1.2) * 0.55;
+
+    // Smoke and flames from heavy turbines
+    this.smokeTimer -= dt;
+    if (particles && this.smokeTimer <= 0) {
+      this.smokeTimer = this.enraged ? 0.04 : 0.08;
+      const smokeCols = this.enraged
+        ? [new THREE.Color(0xff4400), new THREE.Color(0x331100), new THREE.Color(0x110c14)]
+        : [new THREE.Color(0x443a50), new THREE.Color(0x221828), new THREE.Color(0x554865)];
+      for (const sx of [-16, 16]) {
+        const back = new THREE.Vector3(sx, 1, 25).applyQuaternion(this.group.quaternion).add(this.group.position);
+        particles.spawn({
+          pos: back,
+          vel: { x: (Math.random() - 0.5) * 5, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 5 },
+          life: this.enraged ? 1.4 : 1.0,
+          size: this.enraged ? 2.4 : 1.8,
+          drag: 1.0,
+          colors: smokeCols,
+          glow: this.enraged ? 2.5 : 1.2,
+        });
+      }
+    }
+  }
+
+  destroy(particles) {
+    this.destroyed = true;
+    if (particles) {
+      const p = this.group.position;
+      const fireCols = [new THREE.Color(0xffd54a), new THREE.Color(0xff5e5b), new THREE.Color(0xff9a2a)];
+      for (let i = 0; i < 6; i++) {
+        const off = new THREE.Vector3((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 40);
+        particles.fireworkBurst(p.clone().add(off), 40, 18, 'fw_saturn', { colors: fireCols, life: 1.6, size: 2.8 });
+      }
+    }
+  }
+
+  dispose() {
+    for (const d of this.disposables) if (d && d.dispose) d.dispose();
+  }
+}

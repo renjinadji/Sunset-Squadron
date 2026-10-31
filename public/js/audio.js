@@ -614,6 +614,75 @@ export class SoundEngine {
     }
   }
 
+  bossRaidHorn(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [65.41, 98.00, 130.81].forEach((f, i) => {
+      const st = t + i * 0.06;
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(200, st);
+      lp.frequency.exponentialRampToValueAtTime(750, st + 0.5);
+      lp.frequency.exponentialRampToValueAtTime(140, st + 1.8);
+      const g = ctx.createGain();
+      this._env(g, st, 0.22 * volume, 0.08, 1.8);
+      o.connect(lp).connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 1.9);
+    });
+  }
+
+  bossPhaseChange(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (let k = 0; k < 3; k++) {
+      const st = t + k * 0.28;
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(440, st);
+      o.frequency.linearRampToValueAtTime(880, st + 0.14);
+      o.frequency.linearRampToValueAtTime(440, st + 0.26);
+      const g = ctx.createGain();
+      this._env(g, st, 0.18 * volume, 0.02, 0.26);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.27);
+    }
+  }
+
+  bossHit(isCrit = false, volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = isCrit ? 'square' : 'triangle';
+    o.frequency.setValueAtTime(isCrit ? 180 : 90, t);
+    o.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+    const g = ctx.createGain();
+    this._env(g, t, (isCrit ? 0.24 : 0.16) * volume, 0.005, 0.18);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.2);
+  }
+
+  bossDefeat(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [261.63, 329.63, 392.00, 523.25, 659.25, 783.99].forEach((f, i) => {
+      const st = t + i * 0.12;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      this._env(g, st, 0.2 * volume, 0.02, 0.7);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.8);
+    });
+  }
+
   /** Close shave: a rocket-rock whoosh whipping past the canopy. */
   closeShave(volume = 1) {
     if (!this.ctx || this.muted) return;

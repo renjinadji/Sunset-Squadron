@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Graphics, ParticleSystem, PRESETS } from './graphics.js';
 import { World, islandCollision, WATER_LEVEL, WORLD_RADIUS, CEILING } from './world.js';
-import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
+import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
 import { Controls } from './controls.js';
 import { SoundEngine } from './audio.js';
 import { PILOTS, PERKS, POWERUPS, pilotById, perkMultipliers, hexCss } from './pilots-data.js';
@@ -25,8 +25,8 @@ const BARREL_ROLL_TIME = 0.45;
 const STATE_SEND_MS = 50;
 const LERP = 0.25;
 
-const MODE_LABEL = { crown: 'CROWN TAG', blitz: 'ARCH & BALLOON BLITZ', race: 'CHECKPOINT RACE', teams: 'RED VS BLUE' };
-const MODE_NAME = { crown: 'Crown Tag', blitz: 'Blitz', race: 'Checkpoint Race', teams: 'Red vs Blue' };
+const MODE_LABEL = { crown: 'CROWN TAG', blitz: 'ARCH & BALLOON BLITZ', race: 'CHECKPOINT RACE', teams: 'RED VS BLUE', boss: 'BOSS RAID' };
+const MODE_NAME = { crown: 'Crown Tag', blitz: 'Blitz', race: 'Checkpoint Race', teams: 'Red vs Blue', boss: 'Boss Raid' };
 const TEAM_HEX = { red: 0xff5e5b, blue: 0x47c8ff };
 const TEAM_CSS = { red: '#ff5e5b', blue: '#47c8ff' };
 function teamOf(id) { const n = game.names.get(id); return n && n.team ? n.team : null; }
@@ -90,6 +90,7 @@ const ui = {
   hudMode: $('hud-mode'), hudTimer: $('hud-timer'), hudCrown: $('hud-crown'), hudName: $('hud-name'), hudCallsign: $('hud-callsign'), hudPortrait: $('hud-portrait'), hudScore: $('hud-score'),
   hudStamina: $('hud-stamina'), hudCooldown: $('hud-cooldown'), hudSpeed: $('hud-speed'), hudBoard: $('hud-board'), hudPowerups: $('hud-powerups'),
   hudWeather: $('hud-weather'),
+  hudBossBar: $('hud-boss-bar'), bossTitle: $('boss-title'), bossPhaseBadge: $('boss-phase-badge'), bossHpNumbers: $('boss-hp-numbers'), bossHpFill: $('boss-hp-fill'), bossArrow: $('boss-arrow'),
   hudEvent: $('hud-event'), hudEventText: $('hud-event-text'), hudEventHp: $('hud-event-hp'), hudEventHpFill: $('hud-event-hp-fill'),
   hudFeed: $('hud-feed'), hudStunts: $('hud-stunts'), hudBanner: $('hud-banner'), crownArrow: $('crown-arrow'),
   threatVignette: $('threat-vignette'), missileArrow: $('missile-arrow'), missileArrowLabel: $('missile-arrow-label'),
@@ -182,6 +183,7 @@ const mines = new Map();    // id -> { mesh: Mine, pos: Vector3 }
 const decoys = new Map();   // id -> { jet: Jet, pos: Vector3, quat: Quaternion, lastAt: number }
 const meteors = new Map();  // id -> { mesh: Meteor } (Meteor Shower event)
 let blimpMesh = null;            // Boss Blimp event
+let bossMesh = null;             // Sky Dreadnought Boss Raid
 let crown = null;
 let teamCrowns = null;          // Red vs Blue: {red: Crown, blue: Crown}
 let teamRibbons = null;         // Red vs Blue: {red: Ribbon, blue: Ribbon}
@@ -603,6 +605,46 @@ function connectSocket() {
   socket.on('gate', (e) => onGate(e));
   socket.on('finish', (e) => onFinish(e));
   socket.on('crown', (e) => onCrownEvent(e));
+  socket.on('bossHit', (data) => {
+    if (ui.bossHpNumbers) ui.bossHpNumbers.textContent = `${data.hp} / ${data.maxHp} HP`;
+    if (ui.bossHpFill) ui.bossHpFill.style.width = `${Math.max(0, Math.min(100, (data.hp / data.maxHp) * 100))}%`;
+    if (bossMesh) bossMesh.flashHit();
+    const hitPos = data.p ? arrToV(data.p) : (bossMesh ? bossMesh.group.position : null);
+    if (hitPos) {
+      gfx.particles.burst({
+        pos: hitPos,
+        count: data.crit ? 36 : 18,
+        speed: data.crit ? 45 : 25,
+        life: 0.7,
+        size: data.crit ? 1.8 : 1.2,
+        colors: data.crit ? [new THREE.Color(0xff4422), new THREE.Color(0xffbb00), new THREE.Color(0xffffff)] : [new THREE.Color(0xffaa22), new THREE.Color(0x999999)],
+      });
+    }
+    const d = hitPos ? distToMe(data.p) : 200;
+    sound.bossHit(Boolean(data.crit), volumeForDistance(d));
+  });
+  socket.on('bossPhase', (data) => {
+    if (data.phase === 2) {
+      if (ui.bossPhaseBadge) {
+        ui.bossPhaseBadge.textContent = '⚠️ PHASE 2: OVERDRIVE';
+        ui.bossPhaseBadge.classList.add('phase-2');
+      }
+      if (bossMesh) bossMesh.setPhase(2);
+      sound.bossPhaseChange();
+      showBanner('⚠️ BOSS ENRAGED: FLAK BARRAGE & OVERDRIVE ACTIVE!', 4.0);
+      addFeed('⚠️ Dreadnought entering Phase 2: Overdrive engaged!');
+    }
+  });
+  socket.on('bossDown', (data) => {
+    if (ui.bossHpNumbers) ui.bossHpNumbers.textContent = 'DESTROYED';
+    if (ui.bossHpFill) ui.bossHpFill.style.width = '0%';
+    if (bossMesh) bossMesh.destroy(gfx.particles);
+    sound.bossDefeat();
+    const killer = game.names.get(data.by);
+    const killerName = killer ? killer.name : 'A brave pilot';
+    showBanner(`💥 SKY DREADNOUGHT DESTROYED! (+${data.points} PTS)`, 5.0);
+    addFeed(`💥 Sky Dreadnought brought down by ${killerName}!`);
+  });
   socket.on('sponsorAnnouncement', ({ sponsor, message }) => {
     sound.fanfare(0.8);
     if (game.lobby) {
@@ -1527,6 +1569,24 @@ function startRound(data) {
   // Power-up orbs (both modes)
   for (const k of data.pickups || []) spawnPickupMesh(k);
 
+  // Sky Dreadnought Boss Raid
+  if (data.mode === 'boss' && data.boss) {
+    if (bossMesh) { gfx.scene.remove(bossMesh.group); bossMesh.dispose(); bossMesh = null; }
+    bossMesh = new DreadnoughtBoss();
+    bossMesh.setPosition(0, 135, 0);
+    gfx.scene.add(bossMesh.group);
+    ui.hudBossBar.classList.remove('hidden');
+    ui.bossTitle.textContent = data.boss.name ? data.boss.name.toUpperCase() + ' // AEGIS TITAN' : 'SKY DREADNOUGHT // AEGIS TITAN';
+    ui.bossHpNumbers.textContent = `${data.boss.hp} / ${data.boss.maxHp} HP`;
+    ui.bossHpFill.style.width = '100%';
+    ui.bossPhaseBadge.textContent = 'PHASE 1';
+    ui.bossPhaseBadge.classList.remove('phase-2');
+    sound.bossRaidHorn();
+  } else {
+    ui.hudBossBar.classList.add('hidden');
+    if (bossMesh) { gfx.scene.remove(bossMesh.group); bossMesh.dispose(); bossMesh = null; }
+  }
+
   // UI
   ui.lobby.classList.add('hidden');
   ui.results.classList.add('hidden');
@@ -1548,12 +1608,16 @@ function startRound(data) {
     addFeed(`🎉 ${sponsor.name}: ${sponsor.description} (sponsored by ${sponsor.sponsoredBy})`);
   } else {
     showBanner(data.mode === 'teams' ? 'RED VS BLUE!'
-      : data.mode === 'crown' ? 'CHASE THE CROWN!' : data.mode === 'race' ? 'RACE THE COURSE!' : 'POP & DIVE!');
+      : data.mode === 'crown' ? 'CHASE THE CROWN!'
+      : data.mode === 'race' ? 'RACE THE COURSE!'
+      : data.mode === 'boss' ? 'SKY DREADNOUGHT RAID!'
+      : 'POP & DIVE!');
   }
   sound.fanfare(0.7);
   addFeed(data.mode === 'teams' ? `You are on the ${self && self.team === 'blue' ? 'BLUE' : 'RED'} team — hit enemy jets for +10, no friendly fire`
     : data.mode === 'crown' ? 'Grab the Golden Crown: +1 pt every second you hold it'
     : data.mode === 'race' ? `Fly through all ${game.course ? game.course.total : 10} gates in order · 1st finish = 100 pts`
+    : data.mode === 'boss' ? 'Destroy the Sky Dreadnought! Target the ventral reactor core for critical hits!'
     : 'Balloons +10 · Ring gates +25 and SUPER-CHARGE');
 }
 
@@ -1563,6 +1627,8 @@ function endRound(results) {
   ui.touch.classList.add('hidden');
   ui.results.classList.remove('hidden');
   ui.hudPowerups.innerHTML = '';
+  if (ui.hudBossBar) ui.hudBossBar.classList.add('hidden');
+  if (ui.bossArrow) ui.bossArrow.classList.add('hidden');
   if (ui.hudMissileWarning) {
     ui.hudMissileWarning.classList.add('hidden');
     ui.hudMissileWarning.classList.remove('deflected', 'critical');
@@ -1583,6 +1649,9 @@ function endRound(results) {
       ? `${won ? 'VICTORY! ' : ''}${results.winnerTeam === 'red' ? '🔴 RED' : '🔵 BLUE'} WINS ${hi}–${lo}`
       : `DRAW ${ts.red}–${ts.blue}`;
     if (won) sound.personalBest();
+  } else if (results.mode === 'boss') {
+    ui.resultsTitle.textContent = results.bossDefeated ? 'RAID VICTORY — DREADNOUGHT DESTROYED!' : 'TIME EXPIRED — MISSION FAILED';
+    if (results.bossDefeated) sound.personalBest();
   } else {
     ui.resultsTitle.textContent = results.results.length && results.results[0].id === game.myId ? 'YOU WIN!' : 'ROUND OVER';
   }
@@ -1604,6 +1673,7 @@ function endRound(results) {
       ? (r.race && r.race.finished
         ? `🏁 ${ordinal(r.race.finishRank)} · ${r.race.finishTime}s · ${r.score} pts`
         : `${r.race ? `${r.race.gatesPassed}/${r.race.total}` : '0'} gates · ${r.score} pts`)
+      : results.mode === 'boss' ? `${r.bossDamage || 0} boss dmg · ${st.hits || 0} hits`
       : results.mode === 'crown' ? `${st.crownTime || 0}s crown · ${st.hits || 0} hits`
       : results.mode === 'teams' ? `${st.hits || 0} hits · ${st.pickups || 0} orbs`
       : `${st.balloons || 0} balloons · ${st.hits || 0} hits`;
@@ -1812,6 +1882,28 @@ function onSnapshot(snap) {
       blimpMesh.setPosition(snap.ev.p[0], snap.ev.p[1], snap.ev.p[2]);
       if (typeof snap.ev.yaw === 'number') blimpMesh.setRotation(snap.ev.yaw);
     }
+  }
+  // Boss Raid Dreadnought sync
+  if (snap.boss) {
+    if (!bossMesh) {
+      bossMesh = new DreadnoughtBoss();
+      bossMesh.setPosition(snap.boss.p[0], snap.boss.p[1], snap.boss.p[2]);
+      gfx.scene.add(bossMesh.group);
+      ui.hudBossBar.classList.remove('hidden');
+    }
+    if (snap.boss.p) {
+      bossMesh.group.position.set(snap.boss.p[0], snap.boss.p[1], snap.boss.p[2]);
+    }
+    if (typeof snap.boss.yaw === 'number') {
+      bossMesh.setRotation(snap.boss.yaw);
+    }
+    if (snap.boss.ph && snap.boss.ph !== bossMesh.phase) {
+      bossMesh.setPhase(snap.boss.ph);
+      ui.bossPhaseBadge.textContent = snap.boss.ph === 2 ? '⚠️ PHASE 2: OVERDRIVE' : 'PHASE 1';
+      ui.bossPhaseBadge.classList.toggle('phase-2', snap.boss.ph === 2);
+    }
+    ui.bossHpNumbers.textContent = `${snap.boss.hp} / ${snap.boss.mh} HP`;
+    ui.bossHpFill.style.width = `${Math.max(0, Math.min(100, Math.round((snap.boss.hp / snap.boss.mh) * 100)))}%`;
   }
   // Crown + ribbon
   if (crown) {
@@ -2267,6 +2359,8 @@ function updateBoard(snap) {
     ui.hudCrown.textContent = me.fin ? `🏁 FINISHED ${me.fin}` : `🏁 GATE ${Math.min(me.gi + 1, total)}/${total}`;
   } else if (teams) {
     ui.hudCrown.textContent = `🔴 ${teamScore.red} · 🔵 ${teamScore.blue}`;
+  } else if (game.mode === 'boss') {
+    ui.hudCrown.textContent = `☠️ RAID BOSS`;
   } else {
     const holder = snap.crownHolderId ? nameOf(snap.crownHolderId) : (game.mode === 'crown' ? 'loose!' : '');
     ui.hudCrown.textContent = game.mode === 'crown' ? `👑 ${holder}` : `🎈 ${snap.balloons.filter(Boolean).length} left`;
@@ -2447,6 +2541,7 @@ function stepLocalFlight(dt) {
   ui.hudSpeed.textContent = Math.round(me.speed).toString();
   ui.hudScore.textContent = String(me.score);
   updateCrownArrow();
+  updateBossArrow();
   updateMissileWarningSystem();
   updatePowerupHud();
 }
@@ -2490,6 +2585,22 @@ function updateCrownArrow() {
   const onScreen = tmpV3.z < 0 && Math.abs(tmpV3.x / tmpV3.z) < 0.9 && Math.abs(tmpV3.y / tmpV3.z) < 0.6;
   ui.crownArrow.classList.toggle('hidden', onScreen && d < 400);
   ui.crownArrow.style.transform = `rotate(${ang}rad) translateY(-130px)`;
+}
+
+function updateBossArrow() {
+  if (!ui.bossArrow) return;
+  if (game.phase !== 'playing' || game.mode !== 'boss' || !bossMesh || !bossMesh.alive) {
+    ui.bossArrow.classList.add('hidden');
+    return;
+  }
+  const target = bossMesh.group.position;
+  tmpV2.copy(target).sub(me.pos);
+  const d = tmpV2.length();
+  tmpV3.copy(tmpV2).applyQuaternion(tmpQ.copy(gfx.camera.quaternion).invert());
+  const ang = Math.atan2(tmpV3.x, -tmpV3.z);
+  const onScreen = tmpV3.z < 0 && Math.abs(tmpV3.x / tmpV3.z) < 0.9 && Math.abs(tmpV3.y / tmpV3.z) < 0.6;
+  ui.bossArrow.classList.toggle('hidden', onScreen && d < 600);
+  ui.bossArrow.style.transform = `rotate(${ang}rad) translateY(-155px)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2637,6 +2748,13 @@ function stepRemote(dt) {
     if (game.lastSnap && game.lastSnap.ev && game.lastSnap.ev.p) {
       blimpMesh.group.position.lerp(arrToV(game.lastSnap.ev.p), 0.4);
       if (typeof game.lastSnap.ev.yaw === 'number') blimpMesh.group.rotation.y = game.lastSnap.ev.yaw;
+    }
+  }
+  if (bossMesh) {
+    bossMesh.update(dt, nowS(), gfx.particles);
+    if (game.lastSnap && game.lastSnap.boss && game.lastSnap.boss.p) {
+      bossMesh.group.position.lerp(arrToV(game.lastSnap.boss.p), 0.4);
+      if (typeof game.lastSnap.boss.yaw === 'number') bossMesh.group.rotation.y = game.lastSnap.boss.yaw;
     }
   }
   if (goldBalloonMesh) goldBalloonMesh.update(dt, t);

@@ -10,10 +10,10 @@ const fs = require('fs');
 const path = require('path');
 const { DEFAULT_EQUIPPED, itemById, sponsorById } = require('./shared/shop');
 
-const MODES = ['crown', 'blitz', 'race', 'teams'];
+const MODES = ['crown', 'blitz', 'race', 'teams', 'boss'];
 
 function emptyBoard() {
-  return { version: 1, updatedAt: null, modes: { crown: {}, blitz: {}, race: {}, teams: {} }, wallets: {} };
+  return { version: 1, updatedAt: null, modes: { crown: {}, blitz: {}, race: {}, teams: {}, boss: {} }, wallets: {} };
 }
 
 function emptyEntry(name, pilot) {
@@ -247,17 +247,18 @@ class Leaderboard {
   }
 
   summary(n = 10) {
+    const modes = {};
+    const totals = {};
+    for (const m of MODES) {
+      modes[m] = this.top(m, n);
+      totals[m] = Object.keys(this.board.modes[m] || {}).length;
+    }
+    totals.wallets = Object.keys(this.board.wallets || {}).length;
     return {
       updatedAt: this.board.updatedAt,
       file: path.basename(this.file),
-      modes: { crown: this.top('crown', n), blitz: this.top('blitz', n), race: this.top('race', n), teams: this.top('teams', n) },
-      totals: {
-        crown: Object.keys(this.board.modes.crown).length,
-        blitz: Object.keys(this.board.modes.blitz).length,
-        race: Object.keys(this.board.modes.race).length,
-        teams: Object.keys(this.board.modes.teams).length,
-        wallets: Object.keys(this.board.wallets || {}).length,
-      },
+      modes,
+      totals,
     };
   }
 }

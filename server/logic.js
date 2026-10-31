@@ -281,7 +281,7 @@ function computeCreditPayout(options) {
 
   const baseFinish = 50;
 
-  const scoreMult = (mode === 'crown' || mode === 'race') ? 1.0 : 0.5;
+  const scoreMult = (mode === 'crown' || mode === 'race' || mode === 'boss') ? 1.0 : 0.5;
   const rawScoreBonus = Math.floor(Math.max(0, Number(score) || 0) * scoreMult);
   const scoreBonus = Math.min(250, rawScoreBonus);
 
@@ -294,9 +294,11 @@ function computeCreditPayout(options) {
   const isUnderdog = totalPlayers > 1 && rankIndex >= (totalPlayers / 2);
   const underdogBonus = isUnderdog ? 25 : 0;
 
+  const bossDefeatedBonus = options && options.bossDefeated ? 50 : 0;
+
   const sponsorMultiplier = (sponsorId === 'sponsor_golden_skies') ? 1.25 : 1.0;
 
-  const subtotal = baseFinish + scoreBonus + styleBonus + eventBonus + pbBonus + underdogBonus;
+  const subtotal = baseFinish + scoreBonus + styleBonus + eventBonus + pbBonus + underdogBonus + bossDefeatedBonus;
   const totalEarned = Math.round(subtotal * sponsorMultiplier);
 
   return {
@@ -306,6 +308,7 @@ function computeCreditPayout(options) {
     eventBonus,
     pbBonus,
     underdogBonus,
+    bossDefeatedBonus,
     sponsorMultiplier,
     totalEarned,
   };
