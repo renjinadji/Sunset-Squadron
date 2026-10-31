@@ -27,6 +27,7 @@ const {
   raceFinishPoints, gateCrossing, compareRaceResults,
   EVENT_TYPES, generateEvent,
   assessRocketThreat,
+  computeCreditPayout,
 } = require('./server/logic');
 const { PILOTS, POWERUPS, POWERUP_TYPES, PILOT_IDS, pilotById, perkMultipliers } = PILOT_DATA;
 
@@ -284,6 +285,7 @@ const state = {
   race: null,                   // race mode: { course: [...gates], finishCount }
   weather: null,
   eventPlan: null,              // generateEvent(seed, ROUND_SECONDS) — fixed for the round
+  eventPlans: [],               // active queue of mid-round events (e.g. 2 for sponsor_double_event)
   event: null,                  // active event: { type, startedAt, endsAt, data }
   eventFired: false,            // one event per round: blocks re-activation after it ends
   goldBalloon: null,            // balloonRush: { x, y, z, hp, maxHp, alive }
@@ -291,6 +293,7 @@ const state = {
   meteors: [],                  // meteorShower: [{ id, p, v, born, awarded }]
   meteorSeq: 1,
   meteorSpawned: 0,
+  roundSponsor: null,           // active round sponsor modifier { id, name, desc, cost, effect, sponsoredBy }
   roundStartedAt: 0,            // seconds (now()) when the round began, for event timing
   roundEndsAt: 0,
   endedAt: 0,
@@ -301,12 +304,30 @@ state.weather = generateWeather(state.seed);
 
 function now() { return Date.now() / 1000; }
 
+function randomBotEquipped() {
+  const eq = {};
+  for (const cat of SHOP_DATA.SHOP_CATEGORIES) {
+    const list = SHOP_DATA.itemsByCategory(cat);
+    if (list && list.length > 0) {
+      eq[cat] = list[Math.floor(Math.random() * list.length)].id;
+    } else {
+      eq[cat] = SHOP_DATA.DEFAULT_EQUIPPED[cat];
+    }
+  }
+  return eq;
+}
+
 function makePlayer(id, name, pilot, isBot) {
   const wallet = !isBot ? leaderboard.getOrCreateWallet(name) : null;
   return {
     id, name, pilot, isBot,
     perk: perkMultipliers(pilot),
-    equipped: wallet ? wallet.equipped : { ...SHOP_DATA.DEFAULT_EQUIPPED },
+    credits: wallet ? wallet.credits : 0,
+    unlocked: wallet ? wallet.unlocked : [],
+    equipped: wallet ? { ...wallet.equipped } : randomBotEquipped(),
+    roundStylePoints: 0,
+    eventParticipated: false,
+    meteorDodges: 0,
     fx: {},                       // active power-ups: type -> expiry time (seconds)
     stats: { balloons: 0, hits: 0, crownTime: 0, pickups: 0 },
     pos: { x: 0, y: 80, z: 0 },
@@ -431,6 +452,9 @@ function pointMult() {
 }
 /** Wrap every scoring site so the Frenzy multiplier applies on top of personal Score x2. */
 function awardPoints(p, amount, t) {
+  if (state.event && state.event.type === 'frenzy' && amount > 0 && p && !p.isBot) {
+    p.eventParticipated = true;
+  }
   const amt = amount * pointMult();
   addScore(p, amt, t);
   return amt;
@@ -438,6 +462,7 @@ function awardPoints(p, amount, t) {
 /** Style award: goes through awardPoints (Frenzy doubles it) and announces a 'style' event. */
 function awardStyle(p, kind, base, t) {
   const pts = awardPoints(p, base, t);
+  if (p) p.roundStylePoints = (p.roundStylePoints || 0) + Math.round(pts);
   io.emit('style', { kind, points: Math.round(pts), id: p.id });
   return pts;
 }
@@ -449,6 +474,8 @@ function publicPlayer(p) {
     isBot: p.isBot,
     gone: Boolean(p.gone),
     score: Math.round(p.score),
+    credits: p.credits !== undefined ? p.credits : 0,
+    equipped: p.equipped || { ...SHOP_DATA.DEFAULT_EQUIPPED },
     ...(p.team ? { team: p.team } : {}),
     ...(p.equipped ? { eq: p.equipped } : {}),
   };
@@ -472,7 +499,8 @@ function randomPickupPos(rand) {
 }
 function spawnPickups() {
   state.pickups = [];
-  for (let i = 0; i < PICKUP_COUNT; i++) {
+  const targetCount = (state.roundSponsor && state.roundSponsor.id === 'sponsor_crate_rain') ? PICKUP_COUNT * 2 : PICKUP_COUNT;
+  for (let i = 0; i < targetCount; i++) {
     const type = POWERUP_TYPES[i % POWERUP_TYPES.length];
     const pos = randomPickupPos(Math.random);
     state.pickups.push({ id: i, type, x: pos.x, y: pos.y, z: pos.z, alive: true, respawnAt: 0 });
@@ -755,9 +783,30 @@ app.post('/api/wallet/equip', express.json({ limit: '16kb' }), (req, res) => {
 
 app.post('/api/wallet/sponsor', express.json({ limit: '16kb' }), (req, res) => {
   const { name, sponsorId } = req.body || {};
+  if (state.phase !== 'lobby') {
+    return res.status(400).json({ ok: false, error: 'Sponsors can only be activated in the lobby before round starts.' });
+  }
+  if (state.roundSponsor) {
+    return res.status(400).json({ ok: false, error: 'A Round Sponsor is already active for the upcoming round.' });
+  }
+  const sponsorDef = SHOP_DATA.sponsorById(sponsorId);
+  if (!sponsorDef) return res.status(400).json({ ok: false, error: 'Unknown sponsor.' });
   const result = leaderboard.spendCreditsForSponsor(name, sponsorId);
   if (!result.ok) return res.status(400).json(result);
-  res.json(result);
+  state.roundSponsor = {
+    id: sponsorDef.id,
+    name: sponsorDef.name,
+    desc: sponsorDef.desc,
+    cost: sponsorDef.cost,
+    effect: sponsorDef.effect,
+    sponsoredBy: name,
+  };
+  broadcastLobby();
+  io.emit('sponsorAnnouncement', {
+    sponsor: state.roundSponsor,
+    message: `${name} sponsored the upcoming round with ${sponsorDef.name}!`,
+  });
+  res.json({ ...result, sponsor: state.roundSponsor });
 });
 
 app.get('/api/pilots', (req, res) => {
@@ -785,6 +834,8 @@ function lobbyPayload() {
     settings: state.settings,
     seed: state.seed,
     players: [...state.players.values()].map(publicPlayer),
+    activeRoundSponsor: state.roundSponsor || null,
+    roundSponsor: state.roundSponsor || null,
     timeRemaining: state.phase === 'playing' ? Math.max(0, (state.roundEndsAt - Date.now()) / 1000) : 0,
     lastResults: state.lastResults,
     leaderboard: leaderboard.summary(10),
@@ -864,10 +915,13 @@ function detachPlayer(player) {
     for (const b of bots()) state.players.delete(b.id);
     removeAllGone();
     state.rockets = [];
+    state.eventPlans = [];
+    state.eventPlan = null;
     state.event = null;
     state.goldBalloon = null;
     state.blimp = null;
     state.meteors = [];
+    state.roundSponsor = null;
   }
   broadcastLobby();
 }
@@ -885,7 +939,19 @@ function roundStartPayload() {
     ...(state.teamCrowns ? { crowns: { red: { h: state.teamCrowns.red.holderId, pos: state.teamCrowns.red.pos }, blue: { h: state.teamCrowns.blue.holderId, pos: state.teamCrowns.blue.pos } } } : {}),
     pickups: state.pickups.map(pickupPublic),
     course: state.race ? { gates: state.race.course.map((g) => ({ id: g.id, x: r2(g.x), y: r2(g.y), z: r2(g.z), yaw: r3(g.yaw), gateR: g.gateR })), total: state.race.course.length } : null,
-    players: [...state.players.values()].map((p) => ({ id: p.id, name: p.name, pilot: p.pilot, isBot: p.isBot, ...(p.team ? { team: p.team } : {}), pos: p.pos, yaw: p.yaw })),
+    activeRoundSponsor: state.roundSponsor || null,
+    roundSponsor: state.roundSponsor || null,
+    players: [...state.players.values()].map((p) => ({
+      id: p.id,
+      name: p.name,
+      pilot: p.pilot,
+      isBot: p.isBot,
+      credits: p.credits !== undefined ? p.credits : 0,
+      equipped: p.equipped || { ...SHOP_DATA.DEFAULT_EQUIPPED },
+      ...(p.team ? { team: p.team } : {}),
+      pos: p.pos,
+      yaw: p.yaw,
+    })),
   };
 }
 
@@ -929,6 +995,19 @@ function startRound() {
     state.teamCrowns = null;
     all.forEach((p, i) => spawnPlayer(p, i, all.length));
   }
+
+  // Sponsor effects:
+  if (state.roundSponsor && state.roundSponsor.id === 'sponsor_golden_skies') {
+    state.settings.preset = 'sunset';
+  }
+
+  // Reset per-round tracking stats on all active players
+  for (const p of state.players.values()) {
+    p.roundStylePoints = 0;
+    p.eventParticipated = false;
+    p.meteorDodges = 0;
+  }
+
   state.rockets = [];
   state.mines = [];
   state.decoys = [];
@@ -939,8 +1018,29 @@ function startRound() {
   state.phase = 'playing';
   state.roundEndsAt = Date.now() + ROUND_SECONDS * 1000;
   state.lastResults = null;
-  // One seeded mid-round event per round (all modes); fires at plan.atS
-  state.eventPlan = generateEvent(state.seed, ROUND_SECONDS);
+
+  // Mid-round events: schedule 2 seeded mid-round events for sponsor_double_event, else 1
+  if (state.roundSponsor && state.roundSponsor.id === 'sponsor_double_event') {
+    const ev1 = generateEvent(state.seed, ROUND_SECONDS);
+    ev1.atS = Math.round(ROUND_SECONDS / 3);
+    ev1.durS = Math.min(ev1.durS, Math.max(8, Math.round(ROUND_SECONDS / 3) - 6));
+
+    let seed2 = (state.seed ^ 0xa5a5a5a5) >>> 0;
+    let ev2 = generateEvent(seed2, ROUND_SECONDS);
+    for (let tries = 0; tries < 4 && ev2.type === ev1.type; tries++) {
+      seed2 = (seed2 + 0x6d2b79f5) >>> 0;
+      ev2 = generateEvent(seed2, ROUND_SECONDS);
+    }
+    ev2.atS = Math.round((ROUND_SECONDS * 2) / 3);
+    ev2.durS = Math.min(ev2.durS, Math.max(8, Math.round(ROUND_SECONDS / 3) - 6));
+
+    state.eventPlans = [ev1, ev2];
+    state.eventPlan = ev1;
+  } else {
+    const ev1 = generateEvent(state.seed, ROUND_SECONDS);
+    state.eventPlans = [ev1];
+    state.eventPlan = ev1;
+  }
   state.event = null;
   state.eventFired = false;
   state.goldBalloon = null;
@@ -951,7 +1051,7 @@ function startRound() {
   state.roundStartedAt = now();
   io.emit('roundStart', roundStartPayload());
   broadcastLobby();
-  console.log(`[round] started mode=${state.settings.mode} preset=${state.settings.preset} bots=${state.settings.bots} seed=${state.seed} players=${all.length} event=${state.eventPlan.type}@${state.eventPlan.atS}s${state.settings.mode === 'teams' ? ` red=${all.filter((p) => p.team === 'red').length}/blue=${all.filter((p) => p.team === 'blue').length}` : ''}`);
+  console.log(`[round] started mode=${state.settings.mode} preset=${state.settings.preset} bots=${state.settings.bots} seed=${state.seed} players=${all.length} event=${state.eventPlan.type}@${state.eventPlan.atS}s${state.settings.mode === 'teams' ? ` red=${all.filter((p) => p.team === 'red').length}/blue=${all.filter((p) => p.team === 'blue').length}` : ''}${state.roundSponsor ? ` sponsor=${state.roundSponsor.id}` : ''}`);
 }
 
 function endRound() {
@@ -964,6 +1064,11 @@ function endRound() {
   const results = [...state.players.values()]
     .map((p) => ({
       id: p.id, name: p.name, pilot: p.pilot, isBot: p.isBot, score: Math.round(p.score),
+      credits: p.credits !== undefined ? p.credits : 0,
+      equipped: p.equipped || { ...SHOP_DATA.DEFAULT_EQUIPPED },
+      roundStylePoints: Math.round(p.roundStylePoints || 0),
+      eventParticipated: Boolean(p.eventParticipated),
+      creditBreakdown: null,
       ...(p.team ? { team: p.team } : {}),
       stats: { balloons: p.stats.balloons, hits: p.stats.hits, crownTime: Math.round(p.stats.crownTime), pickups: p.stats.pickups },
       race: {
@@ -998,7 +1103,44 @@ function endRound() {
     if (r.isBot) continue;
     r.newBests = bests[Leaderboard.key(r.name, r.pilot)] || [];
   }
-  state.lastResults = { mode, results, endedAt: state.endedAt, winnerId, leaderboard: leaderboard.summary(10), ...(mode === 'teams' ? { teams: teamTotals, winnerTeam } : {}) };
+
+  // Credit payouts for human pilots (at least 1 human played)
+  if (humanRows.length > 0) {
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.isBot) continue;
+      const payout = computeCreditPayout({
+        mode,
+        score: r.score,
+        stylePoints: r.roundStylePoints || 0,
+        eventParticipated: Boolean(r.eventParticipated),
+        hasPb: Array.isArray(r.newBests) && r.newBests.length > 0,
+        rankIndex: i,
+        totalPlayers: results.length,
+        sponsorId: state.roundSponsor ? state.roundSponsor.id : null,
+      });
+      const updatedWallet = leaderboard.awardCredits(r.name, payout.totalEarned);
+      const newBalance = updatedWallet ? updatedWallet.credits : payout.totalEarned;
+      const live = state.players.get(r.id);
+      if (live) live.credits = newBalance;
+      r.credits = newBalance;
+      r.creditBreakdown = {
+        ...payout,
+        newBalance,
+      };
+    }
+  }
+
+  state.lastResults = {
+    mode,
+    results,
+    endedAt: state.endedAt,
+    winnerId,
+    leaderboard: leaderboard.summary(10),
+    activeRoundSponsor: state.roundSponsor || null,
+    roundSponsor: state.roundSponsor || null,
+    ...(mode === 'teams' ? { teams: teamTotals, winnerTeam } : {}),
+  };
   io.emit('roundEnd', state.lastResults);
   console.log(`[round] ended:${mode === 'teams' ? ` RED ${teamTotals.red} - BLUE ${teamTotals.blue} (${winnerTeam || 'draw'});` : ''} ${results.map((r) => `${r.name}=${r.score}`).join(', ')}`);
 }
@@ -1012,12 +1154,14 @@ function returnToLobby() {
   state.decoys = [];
   state.pickups = [];
   state.race = null;
+  state.eventPlans = [];
   state.eventPlan = null;
   state.event = null;
   state.goldBalloon = null;
   state.blimp = null;
   state.meteors = [];
   state.crown = { holderId: null, pos: { x: 0, y: 95, z: 0 }, ribbon: [] };
+  state.roundSponsor = null;
   broadcastLobby();
 }
 
@@ -1095,37 +1239,149 @@ io.on('connection', (socket) => {
     if (!player || state.phase === 'playing' || !data || !PILOT_IDS.includes(data.pilot)) return;
     player.pilot = data.pilot;
     player.perk = perkMultipliers(data.pilot);
+    if (!player.isBot) {
+      const wallet = leaderboard.getOrCreateWallet(player.name);
+      player.credits = wallet.credits;
+      player.unlocked = wallet.unlocked;
+      player.equipped = { ...wallet.equipped };
+    }
     broadcastLobby();
   });
 
-  socket.on('shopBuy', (data, ack) => {
-    if (!player || player.isBot || !data || typeof data !== 'object') return;
-    const res = leaderboard.purchaseItem(player.name, data.itemId);
-    if (res.ok) {
-      player.equipped = res.wallet.equipped;
-      broadcastLobby();
+  const handleShopGet = (ack) => {
+    if (!player || player.isBot) {
+      const resp = { ok: false, error: 'Not connected as player', wallet: null, activeRoundSponsor: state.roundSponsor };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:get', resp);
+      return;
     }
-    if (typeof ack === 'function') ack(res);
-  });
+    const wallet = leaderboard.getOrCreateWallet(player.name);
+    player.credits = wallet.credits;
+    player.unlocked = wallet.unlocked;
+    player.equipped = { ...wallet.equipped };
+    const resp = {
+      ok: true,
+      credits: wallet.credits,
+      unlocked: wallet.unlocked,
+      equipped: wallet.equipped,
+      wallet: {
+        credits: wallet.credits,
+        unlocked: wallet.unlocked,
+        equipped: wallet.equipped,
+        lifetimeCredits: wallet.lifetimeCredits,
+      },
+      activeRoundSponsor: state.roundSponsor || null,
+      roundSponsor: state.roundSponsor || null,
+    };
+    if (typeof ack === 'function') ack(resp);
+    else socket.emit('shop:get', resp);
+  };
+  socket.on('shop:get', handleShopGet);
+  socket.on('shopGet', handleShopGet);
 
-  socket.on('shopEquip', (data, ack) => {
-    if (!player || player.isBot || !data || typeof data !== 'object') return;
-    const res = leaderboard.equipItem(player.name, data.itemId);
-    if (res.ok) {
-      player.equipped = res.wallet.equipped;
-      broadcastLobby();
+  const handleShopBuy = (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') {
+      const resp = { ok: false, error: 'Invalid purchase request' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:buy', resp);
+      return;
     }
-    if (typeof ack === 'function') ack(res);
-  });
+    const itemId = data.itemId;
+    const res = leaderboard.purchaseItem(player.name, itemId);
+    if (res.ok) {
+      player.credits = res.wallet.credits;
+      player.unlocked = res.wallet.unlocked;
+      player.equipped = { ...res.wallet.equipped };
+      broadcastLobby();
+      io.emit('playerEquip', { id: player.id, equipped: player.equipped });
+    }
+    const resp = res.ok
+      ? { ok: true, wallet: res.wallet, credits: res.wallet.credits, equipped: res.wallet.equipped, unlocked: res.wallet.unlocked }
+      : { ok: false, error: res.error };
+    if (typeof ack === 'function') ack(resp);
+    else socket.emit('shop:buy', resp);
+  };
+  socket.on('shop:buy', handleShopBuy);
+  socket.on('shopBuy', handleShopBuy);
 
-  socket.on('shopSponsor', (data, ack) => {
-    if (!player || player.isBot || !data || typeof data !== 'object') return;
-    const res = leaderboard.spendCreditsForSponsor(player.name, data.sponsorId);
-    if (res.ok) {
-      broadcastLobby();
+  const handleShopEquip = (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') {
+      const resp = { ok: false, error: 'Invalid equip request' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:equip', resp);
+      return;
     }
-    if (typeof ack === 'function') ack(res);
-  });
+    const itemId = data.itemId;
+    const res = leaderboard.equipItem(player.name, itemId);
+    if (res.ok) {
+      player.equipped = { ...res.wallet.equipped };
+      broadcastLobby();
+      io.emit('playerEquip', { id: player.id, equipped: player.equipped });
+    }
+    const resp = res.ok
+      ? { ok: true, wallet: res.wallet, equipped: res.wallet.equipped }
+      : { ok: false, error: res.error };
+    if (typeof ack === 'function') ack(resp);
+    else socket.emit('shop:equip', resp);
+  };
+  socket.on('shop:equip', handleShopEquip);
+  socket.on('shopEquip', handleShopEquip);
+
+  const handleShopSponsor = (data, ack) => {
+    if (!player || player.isBot || !data || typeof data !== 'object') {
+      const resp = { ok: false, error: 'Invalid sponsor request' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:sponsor', resp);
+      return;
+    }
+    if (state.phase !== 'lobby') {
+      const resp = { ok: false, error: 'Sponsors can only be activated in the lobby before round starts.' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:sponsor', resp);
+      return;
+    }
+    if (state.roundSponsor) {
+      const resp = { ok: false, error: 'A Round Sponsor is already active for the upcoming round.' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:sponsor', resp);
+      return;
+    }
+    const sponsorId = data.sponsorId;
+    const sponsorDef = SHOP_DATA.sponsorById(sponsorId);
+    if (!sponsorDef) {
+      const resp = { ok: false, error: 'Unknown sponsor.' };
+      if (typeof ack === 'function') ack(resp);
+      else socket.emit('shop:sponsor', resp);
+      return;
+    }
+    const res = leaderboard.spendCreditsForSponsor(player.name, sponsorId);
+    if (!res.ok) {
+      if (typeof ack === 'function') ack(res);
+      else socket.emit('shop:sponsor', res);
+      return;
+    }
+    player.credits = res.wallet.credits;
+    state.roundSponsor = {
+      id: sponsorDef.id,
+      name: sponsorDef.name,
+      desc: sponsorDef.desc,
+      cost: sponsorDef.cost,
+      effect: sponsorDef.effect,
+      sponsoredBy: player.name,
+      sponsoredById: player.id,
+    };
+    broadcastLobby();
+    io.emit('sponsorAnnouncement', {
+      sponsor: state.roundSponsor,
+      message: `${player.name} sponsored the upcoming round with ${sponsorDef.name}!`,
+    });
+    console.log(`[sponsor] ${player.name} activated ${sponsorDef.name} (${sponsorDef.id})`);
+    const resp = { ok: true, wallet: res.wallet, sponsor: state.roundSponsor, activeRoundSponsor: state.roundSponsor };
+    if (typeof ack === 'function') ack(resp);
+    else socket.emit('shop:sponsor', resp);
+  };
+  socket.on('shop:sponsor', handleShopSponsor);
+  socket.on('shopSponsor', handleShopSponsor);
 
   socket.on('setSettings', (data) => {
     if (!player || socket.id !== state.hostId || !data || typeof data !== 'object') return;
@@ -1786,6 +2042,8 @@ function endEvent() {
 function hitGoldBalloon(byId, t) {
   const gb = state.goldBalloon;
   if (!gb || !gb.alive) return;
+  const shooter = state.players.get(byId);
+  if (shooter && !shooter.isBot) shooter.eventParticipated = true;
   gb.hp--;
   io.emit('eventProgress', { hp: gb.hp, maxHp: gb.maxHp });
   io.emit('boom', { p: [r2(gb.x), r2(gb.y), r2(gb.z)] });
@@ -1816,6 +2074,8 @@ function spawnPickupShower(pos) {
 function damageBlimp(amount, byId, t, hitPos) {
   const bl = state.blimp;
   if (!bl || !bl.alive) return;
+  const shooter = state.players.get(byId);
+  if (shooter && !shooter.isBot) shooter.eventParticipated = true;
   const oldHp = bl.hp;
   bl.hp = Math.max(0, bl.hp - amount);
   const pos = hitPos || bl.pos;
@@ -1841,6 +2101,7 @@ function killBlimp(winnerId, t) {
   let pts = 100;
   const p = state.players.get(winnerId);
   if (p) {
+    if (!p.isBot) p.eventParticipated = true;
     pts = awardPoints(p, 100, t);
     p.stats.hits++;
   }
@@ -1859,6 +2120,7 @@ function popGoldBalloon(winnerId, t) {
   let pts = 50;
   const p = state.players.get(winnerId);
   if (p) {
+    if (!p.isBot) p.eventParticipated = true;
     pts = awardPoints(p, 50, t);
     p.fx.x2 = Math.max(p.fx.x2 || 0, t + 10);
     p.stats.balloons++;
@@ -1940,6 +2202,8 @@ function stepMeteors(dt, t) {
       if (!m.isBomb && d < METEOR_SHAVE_R && !m.awarded[p.id] && t - (p.lastShaveAt || -9) >= SHAVE_THROTTLE_S) {
         m.awarded[p.id] = true;
         p.lastShaveAt = t;
+        p.meteorDodges = (p.meteorDodges || 0) + 1;
+        if (p.meteorDodges >= 3 && !p.isBot) p.eventParticipated = true;
         const pts = awardPoints(p, 5, t);
         io.emit('closeShave', { id: p.id, meteor: m.id, points: Math.round(pts) });
       }
@@ -1980,13 +2244,18 @@ function stepStyle(t) {
 
 /** Per-tick event scheduler: activation at the seeded time, expiry, per-event stepping. */
 function stepEvent(dt, t) {
-  const plan = state.eventPlan;
-  if (!plan) return;
   const elapsed = t - state.roundStartedAt;
   if (!state.event) {
-    if (state.eventFired || elapsed < plan.atS) return;
-    state.eventFired = true;   // one seeded event per round — never re-fires
-    activateEvent(plan, t);
+    if (state.eventPlans && state.eventPlans.length > 0) {
+      const nextPlan = state.eventPlans[0];
+      if (elapsed >= nextPlan.atS) {
+        state.eventPlans.shift();
+        state.eventPlan = nextPlan;
+        state.eventFired = true;
+        activateEvent(nextPlan, t);
+        return;
+      }
+    }
     return;
   } else if (t >= state.event.endsAt) {
     endEvent();

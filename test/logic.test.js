@@ -283,3 +283,81 @@ test('assessRocketThreat: head-on, glancing, retreating, and critical proximity'
   assert.strictEqual(outOfRange.threatening, false);
   assert.strictEqual(outOfRange.distance, 250);
 });
+
+test('computeCreditPayout: base finish, score bonus across modes, caps and breakdown', () => {
+  // Base finish only (zero score, solo player)
+  const baseOnly = logic.computeCreditPayout({ mode: 'crown', score: 0, totalPlayers: 1 });
+  assert.strictEqual(baseOnly.baseFinish, 50);
+  assert.strictEqual(baseOnly.scoreBonus, 0);
+  assert.strictEqual(baseOnly.styleBonus, 0);
+  assert.strictEqual(baseOnly.eventBonus, 0);
+  assert.strictEqual(baseOnly.pbBonus, 0);
+  assert.strictEqual(baseOnly.underdogBonus, 0);
+  assert.strictEqual(baseOnly.sponsorMultiplier, 1.0);
+  assert.strictEqual(baseOnly.totalEarned, 50);
+
+  // Crown tag mode: 1.0x score multiplier
+  const crownPay = logic.computeCreditPayout({ mode: 'crown', score: 120, totalPlayers: 1 });
+  assert.strictEqual(crownPay.scoreBonus, 120);
+
+  // Checkpoint Race mode: 1.0x score multiplier
+  const racePay = logic.computeCreditPayout({ mode: 'race', score: 95, totalPlayers: 1 });
+  assert.strictEqual(racePay.scoreBonus, 95);
+
+  // Balloon Blitz mode: 0.5x score multiplier
+  const blitzPay = logic.computeCreditPayout({ mode: 'blitz', score: 100, totalPlayers: 1 });
+  assert.strictEqual(blitzPay.scoreBonus, 50);
+
+  // Teams mode: 0.5x score multiplier
+  const teamsPay = logic.computeCreditPayout({ mode: 'teams', score: 300, totalPlayers: 1 });
+  assert.strictEqual(teamsPay.scoreBonus, 150);
+
+  // Score bonus cap at 250 CR
+  const cappedCrown = logic.computeCreditPayout({ mode: 'crown', score: 500, totalPlayers: 1 });
+  assert.strictEqual(cappedCrown.scoreBonus, 250);
+  const cappedBlitz = logic.computeCreditPayout({ mode: 'blitz', score: 800, totalPlayers: 1 });
+  assert.strictEqual(cappedBlitz.scoreBonus, 250);
+});
+
+test('computeCreditPayout: style, mid-round event, pb, and underdog bonuses', () => {
+  // Style bonus: Math.floor(stylePoints * 1.5)
+  const stylePay = logic.computeCreditPayout({ score: 0, stylePoints: 25, totalPlayers: 1 });
+  assert.strictEqual(stylePay.styleBonus, 37); // floor(25 * 1.5) = 37
+
+  // Mid-round event participation: +40 CR
+  const eventPay = logic.computeCreditPayout({ score: 0, eventParticipated: true, totalPlayers: 1 });
+  assert.strictEqual(eventPay.eventBonus, 40);
+
+  // New Personal Best: +75 CR
+  const pbPay = logic.computeCreditPayout({ score: 0, hasPb: true, totalPlayers: 1 });
+  assert.strictEqual(pbPay.pbBonus, 75);
+
+  // Underdog bonus: 4 players, rankIndex 0 & 1 (top half) -> 0; rankIndex 2 & 3 (bottom half) -> 25
+  const topHalf = logic.computeCreditPayout({ score: 0, rankIndex: 1, totalPlayers: 4 });
+  assert.strictEqual(topHalf.underdogBonus, 0);
+  const bottomHalf = logic.computeCreditPayout({ score: 0, rankIndex: 2, totalPlayers: 4 });
+  assert.strictEqual(bottomHalf.underdogBonus, 25);
+  const lastPlace = logic.computeCreditPayout({ score: 0, rankIndex: 3, totalPlayers: 4 });
+  assert.strictEqual(lastPlace.underdogBonus, 25);
+});
+
+test('computeCreditPayout: sponsor_golden_skies applies 1.25x multiplier to total', () => {
+  // Subtotal = 50 (base) + 100 (score) + 30 (style) + 40 (event) + 75 (pb) + 25 (underdog) = 320
+  const normal = logic.computeCreditPayout({
+    mode: 'crown', score: 100, stylePoints: 20, eventParticipated: true, hasPb: true, rankIndex: 2, totalPlayers: 4,
+  });
+  assert.strictEqual(normal.sponsorMultiplier, 1.0);
+  assert.strictEqual(normal.totalEarned, 320);
+
+  const golden = logic.computeCreditPayout({
+    mode: 'crown', score: 100, stylePoints: 20, eventParticipated: true, hasPb: true, rankIndex: 2, totalPlayers: 4,
+    sponsorId: 'sponsor_golden_skies',
+  });
+  assert.strictEqual(golden.sponsorMultiplier, 1.25);
+  // 320 * 1.25 = 400
+  assert.strictEqual(golden.totalEarned, 400);
+
+  // Rounding check: 50 * 1.25 = 62.5 -> 63
+  const roundedGolden = logic.computeCreditPayout({ score: 0, totalPlayers: 1, sponsorId: 'sponsor_golden_skies' });
+  assert.strictEqual(roundedGolden.totalEarned, 63);
+});

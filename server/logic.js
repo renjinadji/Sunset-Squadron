@@ -255,6 +255,62 @@ function assessRocketThreat(rocketPos, rocketDir, targetPos, rocketSpeed = 130, 
   };
 }
 
+/**
+ * Calculates end-of-round Sky Credits payout for a human player.
+ *
+ * Rules:
+ * - baseFinish: 50 CR
+ * - scoreBonus: floor(score * 1.0) for crown/race, floor(score * 0.5) for blitz/teams (capped at 250 CR)
+ * - styleBonus: floor(stylePointsEarned * 1.5)
+ * - eventBonus: +40 CR if the player participated/scored during the mid-round event
+ * - pbBonus: +75 CR if the player achieved a NEW PB this round
+ * - underdogBonus: +25 CR if finishing in the bottom half of players
+ * - sponsorMultiplier: 1.25x if sponsor_golden_skies is active (Math.round(total * 1.25))
+ */
+function computeCreditPayout(options) {
+  const {
+    mode = 'crown',
+    score = 0,
+    stylePoints = 0,
+    eventParticipated = false,
+    hasPb = false,
+    rankIndex = 0,
+    totalPlayers = 1,
+    sponsorId = null,
+  } = options || {};
+
+  const baseFinish = 50;
+
+  const scoreMult = (mode === 'crown' || mode === 'race') ? 1.0 : 0.5;
+  const rawScoreBonus = Math.floor(Math.max(0, Number(score) || 0) * scoreMult);
+  const scoreBonus = Math.min(250, rawScoreBonus);
+
+  const styleBonus = Math.floor(Math.max(0, Number(stylePoints) || 0) * 1.5);
+
+  const eventBonus = eventParticipated ? 40 : 0;
+
+  const pbBonus = hasPb ? 75 : 0;
+
+  const isUnderdog = totalPlayers > 1 && rankIndex >= (totalPlayers / 2);
+  const underdogBonus = isUnderdog ? 25 : 0;
+
+  const sponsorMultiplier = (sponsorId === 'sponsor_golden_skies') ? 1.25 : 1.0;
+
+  const subtotal = baseFinish + scoreBonus + styleBonus + eventBonus + pbBonus + underdogBonus;
+  const totalEarned = Math.round(subtotal * sponsorMultiplier);
+
+  return {
+    baseFinish,
+    scoreBonus,
+    styleBonus,
+    eventBonus,
+    pbBonus,
+    underdogBonus,
+    sponsorMultiplier,
+    totalEarned,
+  };
+}
+
 module.exports = {
   mulberry32,
   quatFromYPR, forwardFromYP, wrapAngle,
@@ -266,4 +322,5 @@ module.exports = {
   RACE_FINISH_BASE, RACE_FINISH_STEP, RACE_FINISH_MIN, raceFinishPoints,
   gateCrossing, compareRaceResults,
   assessRocketThreat,
+  computeCreditPayout,
 };
