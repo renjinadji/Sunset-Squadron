@@ -103,13 +103,22 @@ const leaderboard = new Leaderboard();
 const PRESETS = ['sunset', 'noon', 'twilight'];
 const MODES = ['crown', 'blitz', 'race', 'teams', 'boss'];
 
-// Boss Raid Mode
-const BOSS_BASE_HP = 500;            // Base Dreadnought HP (scales +100 per additional human player)
+// Boss Raid Mode (Sonic Frontiers Titan Encounter)
+const BOSS_BASE_HP = 800;            // Base Dreadnought HP (scales per wingman/player)
+const BOSS_HP_PER_PILOT = 250;       // Health scaling per additional player or bot wingman
 const BOSS_COLLISION_R = 36;         // Hitbox radius for rocket / mine collisions
 const BOSS_CORE_R = 14;              // Critical weak-point radius
 const BOSS_RAM_SPEED = 24;           // Min speed to damage boss by ramming
 const BOSS_SPEED_PHASE1 = 18;        // Cruise speed in phase 1
-const BOSS_SPEED_PHASE2 = 27;        // Accelerated speed in phase 2 enrage
+const BOSS_SPEED_PHASE2 = 28;        // Accelerated speed in phase 2 enrage
+const BOSS_MISSILE_INTERVAL_P1 = 4.2; // Seconds between seeker missile salvos in phase 1
+const BOSS_MISSILE_INTERVAL_P2 = 2.4; // Rapid missile salvos in phase 2
+const BOSS_TURRET_BURST_P1 = 1.6;    // Seconds between autocannon tracer bursts in phase 1
+const BOSS_TURRET_BURST_P2 = 0.9;    // Rapid bullet bursts in phase 2
+const BOSS_RING_INTERVAL_P2 = 4.5;   // Cyberspace bullet hell radial pulse interval in phase 2
+const BOSS_BULLET_SPEED = 125;       // Fast tracer round velocity
+const BOSS_BULLET_LIFE = 2.4;        // Seconds before bullets expire
+const BOSS_BULLET_HIT_R = 5.2;       // Hit radius against player jets
 const BOSS_FLAK_INTERVAL_P1 = 4.0;   // Seconds between flak salvoes in phase 1
 const BOSS_FLAK_INTERVAL_P2 = 2.2;   // Faster flak salvoes in phase 2
 
@@ -301,6 +310,8 @@ const state = {
   goldBalloon: null,            // balloonRush: { x, y, z, hp, maxHp, alive }
   blimp: null,                  // blimp event: { hp, maxHp, pos, dir, seed, speed, radius, y, startAng, orbitDir, drops, dropIdx, alive }
   boss: null,                   // boss raid mode: { alive, hp, maxHp, phase, enraged, pos, dir, yaw, pitch, roll, orbitRadius, orbitSpeed, orbitAngle, altitude, altitudePhase, lastFlakAt, damageMap }
+  bossBullets: [],              // boss raid autocannon / cyber energy projectiles
+  bossBulletSeq: 1,
   meteors: [],                  // meteorShower: [{ id, p, v, born, awarded }]
   meteorSeq: 1,
   meteorSpawned: 0,
@@ -932,6 +943,7 @@ function detachPlayer(player) {
     state.goldBalloon = null;
     state.blimp = null;
     state.boss = null;
+    state.bossBullets = [];
     state.meteors = [];
     state.roundSponsor = null;
   }
@@ -1027,8 +1039,8 @@ function startRound() {
   state.crown = { holderId: null, pos: { x: 0, y: 95, z: 0 }, ribbon: [] };
   state.race = state.settings.mode === 'race' ? { course: generateCourse(state.seed, state.layout), finishCount: 0 } : null;
   if (state.settings.mode === 'boss') {
-    const numHumans = humans().length;
-    const maxHp = BOSS_BASE_HP + Math.max(0, numHumans - 1) * 100;
+    const totalPilots = state.players.size;
+    const maxHp = BOSS_BASE_HP + Math.max(0, totalPilots - 1) * BOSS_HP_PER_PILOT;
     state.boss = {
       alive: true,
       hp: maxHp,
@@ -1046,11 +1058,18 @@ function startRound() {
       altitude: 135,
       altitudePhase: 0,
       lastFlakAt: 0,
+      lastMissileAt: 1.5,
+      lastTurretAt: 2.0,
+      lastRingAt: 0,
+      turretIdx: 0,
       damageMap: {},
       flakSeq: 1,
     };
+    state.bossBullets = [];
+    state.bossBulletSeq = 1;
   } else {
     state.boss = null;
+    state.bossBullets = [];
   }
   state.balloons = state.layout.balloons.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, tint: b.tint, alive: true, respawnAt: 0 }));
   spawnPickups();
@@ -1203,6 +1222,7 @@ function returnToLobby() {
   state.goldBalloon = null;
   state.blimp = null;
   state.boss = null;
+  state.bossBullets = [];
   state.meteors = [];
   state.crown = { holderId: null, pos: { x: 0, y: 95, z: 0 }, ribbon: [] };
   state.roundSponsor = null;
@@ -1665,7 +1685,9 @@ function stepRockets(dt, t) {
         if (ang > Math.PI / 2 + 0.3) { r.target = null; }
         else if (ang > 0.0005) {
           const owner = state.players.get(r.owner);
-          const turnMult = owner && owner.perk && owner.perk.homingTurn ? owner.perk.homingTurn : 1;
+          const turnMult = (r.owner === 'boss' && state.boss && state.boss.phase === 2)
+            ? 1.4
+            : (owner && owner.perk && owner.perk.homingTurn ? owner.perk.homingTurn : 1);
           const step = Math.min(ang, HOMING_TURN * turnMult * dt);
           const perp = vnorm(vsub(to, vscale(r.d, cosA)));
           r.d = vnorm(vadd(vscale(r.d, Math.cos(step)), vscale(perp, Math.sin(step))));
@@ -1763,7 +1785,7 @@ function stepRockets(dt, t) {
       damageBlimp(4, r.owner, t, r.p);
     }
     // Sky Dreadnought: rocket hit deals 4 hp (or 6 hp crit on reactor core) in Boss Raid
-    if (!dead && state.boss && state.boss.alive && dist(state.boss.pos, r.p) < BOSS_COLLISION_R) {
+    if (!dead && state.boss && state.boss.alive && dist(state.boss.pos, r.p) < BOSS_COLLISION_R && r.owner !== 'boss') {
       dead = true;
       const isCrit = dist(state.boss.pos, r.p) < BOSS_CORE_R;
       const dmg = isCrit ? 6 : 4;
@@ -2232,6 +2254,7 @@ function killBoss(killerId, t) {
   const boss = state.boss;
   if (!boss || !boss.alive) return;
   boss.alive = false;
+  state.bossBullets = [];
   let pts = 250;
   const killer = state.players.get(killerId);
   if (killer) {
@@ -2276,32 +2299,163 @@ function stepBossRaid(dt, t) {
   boss.dir.z = dirZ;
   boss.yaw = Math.atan2(-dirX, -dirZ);
 
-  // Defensive Flak / Ordnance
+  // Active targets: gather non-gone players & wingmen within engagement radius
+  const targets = [];
+  for (const p of state.players.values()) {
+    if (p.gone) continue;
+    const d = dist(p.pos, boss.pos);
+    if (d < 460) targets.push({ player: p, dist: d });
+  }
+  targets.sort((a, b) => a.dist - b.dist);
+
+  // 1. MISSILE SALVOS (Sonic Frontiers Seeker Swarm)
+  const missileInterval = boss.phase === 2 ? BOSS_MISSILE_INTERVAL_P2 : BOSS_MISSILE_INTERVAL_P1;
+  if (t - boss.lastMissileAt >= missileInterval && targets.length > 0) {
+    boss.lastMissileAt = t;
+    const count = boss.phase === 2 ? Math.min(4, Math.max(2, targets.length)) : Math.min(2, targets.length);
+
+    for (let i = 0; i < count; i++) {
+      const tg = targets[i % targets.length].player;
+      // Launch from alternating port / starboard missile sponsons
+      const side = (i % 2 === 0) ? -1 : 1;
+      const perpX = -dirZ * side;
+      const perpZ = dirX * side;
+      const launchPos = {
+        x: boss.pos.x + perpX * 16,
+        y: boss.pos.y + 3.5,
+        z: boss.pos.z + perpZ * 16,
+      };
+      // Upward arcing launch vector with side flare
+      const launchDir = vnorm({
+        x: perpX * 0.55 + dirX * 0.25,
+        y: 0.72 + Math.random() * 0.22,
+        z: perpZ * 0.55 + dirZ * 0.25,
+      });
+
+      const rocket = {
+        id: state.rocketSeq++,
+        owner: 'boss',
+        team: null,
+        p: launchPos,
+        d: launchDir,
+        born: t,
+        target: tg.id,
+        targetKind: 'player',
+        isBossRocket: true,
+        awarded: {},
+      };
+      state.rockets.push(rocket);
+
+      // Audible missile lock warning to targeted human pilot
+      if (!tg.isBot) {
+        io.to(tg.id).emit('missileLock', { id: rocket.id, shooter: 'boss' });
+      }
+    }
+
+    io.emit('bossMissilesFired', {
+      count,
+      pos: [r2(boss.pos.x), r2(boss.pos.y), r2(boss.pos.z)],
+    });
+  }
+
+  // 2. AUTOCANNON TRACER BULLETS (Rapid-Fire Turrets)
+  const turretInterval = boss.phase === 2 ? BOSS_TURRET_BURST_P2 : BOSS_TURRET_BURST_P1;
+  if (t - boss.lastTurretAt >= turretInterval && targets.length > 0) {
+    boss.lastTurretAt = t;
+    boss.turretIdx = (boss.turretIdx + 1) % 2;
+    const tz = boss.turretIdx === 0 ? -13 : 10;
+    const ty = boss.turretIdx === 0 ? 5.4 : 5.9;
+    const turretPos = {
+      x: boss.pos.x + dirX * tz,
+      y: boss.pos.y + ty,
+      z: boss.pos.z + dirZ * tz,
+    };
+
+    const targetPilot = targets[0].player;
+    const burstCount = boss.phase === 2 ? 4 : 3;
+    const baseDir = vnorm(vsub(targetPilot.pos, turretPos));
+
+    for (let bIdx = 0; bIdx < burstCount; bIdx++) {
+      const spreadX = (Math.random() - 0.5) * 0.08;
+      const spreadY = (Math.random() - 0.5) * 0.08;
+      const spreadZ = (Math.random() - 0.5) * 0.08;
+      const bulletDir = vnorm({
+        x: baseDir.x + spreadX,
+        y: baseDir.y + spreadY,
+        z: baseDir.z + spreadZ,
+      });
+
+      state.bossBullets.push({
+        id: state.bossBulletSeq++,
+        p: {
+          x: turretPos.x + bulletDir.x * (bIdx * 3.5),
+          y: turretPos.y + bulletDir.y * (bIdx * 3.5),
+          z: turretPos.z + bulletDir.z * (bIdx * 3.5),
+        },
+        v: vscale(bulletDir, BOSS_BULLET_SPEED),
+        born: t + bIdx * 0.04,
+        isRing: false,
+        awarded: {},
+      });
+    }
+
+    io.emit('bossTurretFire', {
+      p: [r2(turretPos.x), r2(turretPos.y), r2(turretPos.z)],
+      d: [r3(baseDir.x), r3(baseDir.y), r3(baseDir.z)],
+      burst: burstCount,
+      turretIdx: boss.turretIdx,
+    });
+  }
+
+  // 3. PHASE 2 CYBERSPACE BULLET HELL RADIAL RING
+  if (boss.phase === 2) {
+    if (t - boss.lastRingAt >= BOSS_RING_INTERVAL_P2) {
+      boss.lastRingAt = t;
+      const ringProjectiles = 12;
+      const ringElevations = [-0.12, 0, 0.12];
+
+      for (let rIdx = 0; rIdx < ringProjectiles; rIdx++) {
+        const ang = (rIdx / ringProjectiles) * Math.PI * 2 + (boss.orbitAngle * 1.5);
+        const el = ringElevations[rIdx % ringElevations.length];
+        const rDir = vnorm({
+          x: Math.cos(ang),
+          y: el,
+          z: Math.sin(ang),
+        });
+        state.bossBullets.push({
+          id: state.bossBulletSeq++,
+          p: { x: boss.pos.x, y: boss.pos.y - 2.5, z: boss.pos.z },
+          v: vscale(rDir, 48),
+          born: t,
+          isRing: true,
+          awarded: {},
+        });
+      }
+
+      io.emit('bossRingWave', {
+        p: [r2(boss.pos.x), r2(boss.pos.y - 2.5), r2(boss.pos.z)],
+      });
+    }
+  }
+
+  // 4. DEFENSIVE FLAK & AFT MINES
   const flakInterval = boss.phase === 2 ? BOSS_FLAK_INTERVAL_P2 : BOSS_FLAK_INTERVAL_P1;
   if (t - boss.lastFlakAt >= flakInterval) {
     boss.lastFlakAt = t;
-    let nearest = null, nd = Infinity;
-    for (const p of state.players.values()) {
-      if (p.gone) continue;
-      const d = dist(p.pos, boss.pos);
-      if (d < 380 && d < nd) { nd = d; nearest = p; }
-    }
-    let flakVel = { x: 0, y: -20, z: 0 };
-    if (nearest) {
+    if (targets.length > 0) {
+      const nearest = targets[0].player;
       const toP = vnorm(vsub(nearest.pos, boss.pos));
-      flakVel = vscale(toP, boss.phase === 2 ? 40 : 28);
-    } else {
-      flakVel = { x: (Math.random() - 0.5) * 30, y: -25, z: (Math.random() - 0.5) * 30 };
+      const flakVel = vscale(toP, boss.phase === 2 ? 42 : 30);
+      state.meteors.push({
+        id: state.meteorSeq++,
+        p: { x: boss.pos.x, y: boss.pos.y - 6, z: boss.pos.z },
+        v: flakVel,
+        born: t,
+        isBomb: true,
+        isFlak: true,
+        awarded: {},
+      });
     }
-    state.meteors.push({
-      id: state.meteorSeq++,
-      p: { x: boss.pos.x, y: boss.pos.y - 6, z: boss.pos.z },
-      v: flakVel,
-      born: t,
-      isBomb: true,
-      isFlak: true,
-      awarded: {},
-    });
 
     if (boss.phase === 2 && Math.random() < 0.45 && state.mines.length < 12) {
       state.mines.push({
@@ -2313,6 +2467,59 @@ function stepBossRaid(dt, t) {
       });
     }
   }
+}
+
+function stepBossBullets(dt, t) {
+  if (!state.bossBullets || state.bossBullets.length === 0) return;
+  const alive = [];
+  for (const b of state.bossBullets) {
+    if (t < b.born) { alive.push(b); continue; }
+    if (t - b.born > (b.isRing ? 3.5 : BOSS_BULLET_LIFE)) continue;
+
+    b.p = vadd(b.p, vscale(b.v, dt));
+    let dead = false;
+
+    for (const p of state.players.values()) {
+      if (p.gone) continue;
+      const d = dist(p.pos, b.p);
+      const hitR = b.isRing ? 6.5 : BOSS_BULLET_HIT_R;
+
+      if (d < hitR && t >= p.invulnUntil && !(t < p.rollingUntil)) {
+        dead = true;
+        if (hasFx(p, 'shield', t)) {
+          delete p.fx.shield;
+          io.emit('shieldBreak', { id: p.id, by: 'boss', p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)] });
+        } else {
+          // Stagger/tumble: 0.45s tumble, debounced to prevent stunlock
+          if (t - (p.lastBulletHitAt || 0) >= 0.75) {
+            p.lastBulletHitAt = t;
+            p.tumbleUntil = t + 0.45 * p.perk.tumble;
+            io.emit('hit', { shooter: 'boss', victim: p.id, p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], crownStolen: false, bullet: true, isRing: Boolean(b.isRing) });
+          }
+        }
+        io.emit('boom', { p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], small: true });
+        break;
+      }
+
+      // Close Call style points: weaving past boss bullets without getting hit
+      if (d < 12 && !b.awarded[p.id] && t - (p.lastCloseCallAt || 0) >= 1.0) {
+        b.awarded[p.id] = true;
+        p.lastCloseCallAt = t;
+        awardStyle(p, 'closeCall', 5, t);
+      }
+    }
+
+    if (!dead && islandCollision(b.p, state.layout.islands)) {
+      dead = true;
+      io.emit('boom', { p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], small: true });
+    }
+    if (!dead && b.p.y < WATER_LEVEL) {
+      dead = true;
+      io.emit('boom', { p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], water: true, small: true });
+    }
+    if (!dead) alive.push(b);
+  }
+  state.bossBullets = alive;
 }
 
 /** Golden balloon burst: +50 and a flat 10s Score x2 to the popper, then the event ends. */
@@ -2613,11 +2820,18 @@ function stepBot(p, dt, t) {
     const tVel = vscale(boss.dir, boss.orbitSpeed);
     const tHit = clamp(d / ROCKET_SPEED, 0, 1.5);
     const leadPos = vadd(boss.pos, vscale(tVel, tHit));
-    goal = leadPos;
-    wantBoost = d > 160 && p.stamina > 0.35;
-    const toLead = vnorm(vsub(leadPos, p.pos));
-    const fwd = forwardFromYP(p.yaw, p.pitch);
-    if (d < 260 && vdot(toLead, fwd) > Math.cos(HOMING_CONE * 0.8)) wantFire = true;
+    if (d < 75) {
+      // Disengage run: bank away from the Dreadnought hull to circle back
+      const away = vnorm(vsub(p.pos, boss.pos));
+      goal = vadd(p.pos, vscale(away, 120));
+      wantBoost = p.stamina > 0.3;
+    } else {
+      goal = leadPos;
+      wantBoost = d > 160 && p.stamina > 0.35;
+      const toLead = vnorm(vsub(leadPos, p.pos));
+      const fwd = forwardFromYP(p.yaw, p.pitch);
+      if (d < 260 && vdot(toLead, fwd) > Math.cos(HOMING_CONE * 0.8)) wantFire = true;
+    }
   } else if (mode === 'crown' || mode === 'teams') {
     if (bs.targetId === 'flee') {
       // Crown-holders evade: boost away from nearest threat (pursuer or incoming rocket)
@@ -2749,7 +2963,7 @@ function stepBot(p, dt, t) {
   // Occasionally barrel roll when a rocket is homing in
   if (t >= p.rollingUntil) {
     for (const r of state.rockets) {
-      if (r.target === p.id && r.targetKind === 'player' && dist(r.p, p.pos) < 45 && Math.random() < 0.08) {
+      if (r.target === p.id && r.targetKind === 'player' && dist(r.p, p.pos) < 55 && Math.random() < 0.14) {
         p.rollingUntil = t + BARREL_ROLL_TIME * p.perk.rollTime;
         io.emit('roll', { id: p.id });
         break;
@@ -2864,6 +3078,12 @@ function snapshot(t) {
         al: state.boss.alive ? 1 : 0,
       }
     } : {}),
+    bossBullets: (state.settings.mode === 'boss' && state.bossBullets) ? state.bossBullets.filter((b) => t >= b.born).map((b) => ({
+      id: b.id,
+      p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)],
+      d: [r3(b.v.x), r3(b.v.y), r3(b.v.z)],
+      r: b.isRing ? 1 : 0,
+    })) : [],
     meteors: state.meteors.map((m) => ({ id: m.id, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] })),
   };
 }
@@ -2875,7 +3095,10 @@ function tick() {
   if (state.phase === 'playing') {
     for (const b of bots()) stepBot(b, dt, t);
     stepEvent(dt, t);
-    if (state.settings.mode === 'boss') stepBossRaid(dt, t);
+    if (state.settings.mode === 'boss') {
+      stepBossRaid(dt, t);
+      stepBossBullets(dt, t);
+    }
     stepRockets(dt, t);
     stepMines(dt, t);
     stepDecoys(dt, t);

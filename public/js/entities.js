@@ -3262,6 +3262,8 @@ export class DreadnoughtBoss {
     this.enraged = false;
     this.destroyed = false;
     this.alive = true;
+    this.turretFlash = [0, 0];
+    this.missileFlash = [0, 0];
   }
 
   setPosition(x, y, z) {
@@ -3270,6 +3272,17 @@ export class DreadnoughtBoss {
 
   setRotation(yaw) {
     this.group.rotation.y = yaw;
+  }
+
+  fireTurret(idx) {
+    if (idx >= 0 && idx < 2) {
+      this.turretFlash[idx] = 0.16;
+    }
+  }
+
+  fireMissiles() {
+    this.missileFlash[0] = 0.25;
+    this.missileFlash[1] = 0.25;
   }
 
   flashHit() {
@@ -3313,6 +3326,47 @@ export class DreadnoughtBoss {
     if (this.turrets[0]) this.turrets[0].rotation.y = Math.sin(t * 1.8) * 0.45;
     if (this.turrets[1]) this.turrets[1].rotation.y = Math.sin(t * 1.5 + 1.2) * 0.55;
 
+    // Turret muzzle flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.turretFlash[i] > 0) {
+        this.turretFlash[i] -= dt;
+        if (particles && Math.random() < 0.65) {
+          const tz = i === 0 ? -13 : 10;
+          const ty = i === 0 ? 5.4 : 5.9;
+          const mPos = new THREE.Vector3(0, ty, tz - 4).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: mPos,
+            vel: { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6, z: (Math.random() - 0.5) * 6 },
+            life: 0.16,
+            size: 2.2,
+            drag: 0.5,
+            colors: [new THREE.Color(0xffaa00), new THREE.Color(0xff4400)],
+            glow: 3.5,
+          });
+        }
+      }
+    }
+
+    // Missile launch flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.missileFlash[i] > 0) {
+        this.missileFlash[i] -= dt;
+        if (particles && Math.random() < 0.7) {
+          const sx = i === 0 ? -16 : 16;
+          const sPos = new THREE.Vector3(sx, 3.5, -2).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: sPos,
+            vel: { x: (Math.random() - 0.5) * 10, y: 12 + Math.random() * 8, z: (Math.random() - 0.5) * 10 },
+            life: 0.35,
+            size: 2.8,
+            drag: 0.8,
+            colors: [new THREE.Color(0xffd54a), new THREE.Color(0xff5e5b), new THREE.Color(0x888888)],
+            glow: 2.8,
+          });
+        }
+      }
+    }
+
     // Smoke and flames from heavy turbines
     this.smokeTimer -= dt;
     if (particles && this.smokeTimer <= 0) {
@@ -3350,5 +3404,81 @@ export class DreadnoughtBoss {
 
   dispose() {
     for (const d of this.disposables) if (d && d.dispose) d.dispose();
+  }
+}
+
+// ===========================================================================
+// BossBullet (Tracer Slugs & Cyberspace Energy Rings)
+// ===========================================================================
+export class BossBullet {
+  constructor(isRing = false) {
+    this.group = new THREE.Group();
+    this.isRing = isRing;
+
+    if (isRing) {
+      this.mat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x00f0ff,
+        emissiveIntensity: 3.8,
+        roughness: 0.1,
+        metalness: 0.9,
+      });
+      const ringGeo = geo('bossRingProj', () => new THREE.TorusGeometry(1.8, 0.45, 6, 12));
+      const coreGeo = geo('bossRingCore', () => new THREE.SphereGeometry(0.8, 8, 8));
+      const ringMesh = new THREE.Mesh(ringGeo, this.mat);
+      const coreMesh = new THREE.Mesh(coreGeo, this.mat);
+      this.group.add(ringMesh, coreMesh);
+      this.colors = [new THREE.Color(0x00f0ff), new THREE.Color(0x7000ff), new THREE.Color(0xff00aa)];
+    } else {
+      this.mat = new THREE.MeshStandardMaterial({
+        color: 0xff3300,
+        emissive: 0xff4400,
+        emissiveIntensity: 4.0,
+        roughness: 0.2,
+      });
+      const slugGeo = geo('bossTracerSlug', () => {
+        const g = new THREE.CylinderGeometry(0.45, 0.45, 3.6, 6);
+        g.rotateX(Math.PI / 2);
+        return g;
+      });
+      const slugMesh = new THREE.Mesh(slugGeo, this.mat);
+      this.group.add(slugMesh);
+      this.colors = [new THREE.Color(0xff4400), new THREE.Color(0xffbb00), new THREE.Color(0xffffff)];
+    }
+
+    this.trailTimer = 0;
+  }
+
+  setPosition(x, y, z) {
+    this.group.position.set(x, y, z);
+  }
+
+  setDirection(dir) {
+    if (!dir || (dir.x === 0 && dir.y === 0 && dir.z === 0)) return;
+    this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+  }
+
+  update(dt, particles) {
+    if (this.isRing) {
+      this.group.rotation.z += dt * 8.0;
+      this.group.rotation.x += dt * 5.0;
+    }
+    this.trailTimer -= dt;
+    if (particles && this.trailTimer <= 0) {
+      this.trailTimer = this.isRing ? 0.05 : 0.03;
+      particles.spawn({
+        pos: this.group.position,
+        vel: { x: (Math.random() - 0.5) * 3, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 3 },
+        life: 0.35,
+        size: this.isRing ? 1.6 : 1.1,
+        drag: 0.8,
+        colors: this.colors,
+        glow: 2.5,
+      });
+    }
+  }
+
+  dispose() {
+    this.mat.dispose();
   }
 }

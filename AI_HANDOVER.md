@@ -1042,6 +1042,27 @@
     * Added `this.alive = true` in constructor and `this.alive = false` in `destroy()`.
     * Resolved client-side `TypeError: bossMesh.setPosition is not a function` and `bossMesh.setRotation is not a function` which prevented the lobby screen from hiding on round start in boss raid mode.
 
+- **Sonic Frontiers Titan Boss Fight Combat Engine (`server.js`, `public/js/entities.js`, `public/js/audio.js`, `public/js/main.js`, `test/boss.test.js`):**
+  - **Pilot & Wingmen Scaled Dreadnought Health:**
+    * Base Dreadnought HP scaled to 800 (`BOSS_BASE_HP = 800`), scaling dynamically by +250 HP per pilot (`BOSS_HP_PER_PILOT = 250`) across both human players and bot wingmen (`800 + Math.max(0, state.players.size - 1) * 250`). A solo player with 4 AI wingmen faces an 1,800 HP Titan fight.
+  - **Sonic Frontiers Boss Attack Behaviors (`server.js`):**
+    * **Seeker Missile Swarms:** Vertical launch missile batteries fire in alternating salvos (2 in Phase 1, up to 4 in Phase 2) arcing upward before acquiring targets. Emits `missileLock` telemetry to targeted human pilots, triggering the HUD warning: `⚠️ TITAN MISSILE LOCK! — BARREL ROLL TO DEFLECT`.
+    * **Autocannon Tracer Bursts:** Dorsal twin rotary turrets dynamically target the nearest pilot/wingman, calculating lead intercept and firing high-speed tracer bursts (125 m/s) with muzzle flash effects. Bullets cause a short 0.45s tumble/stagger (with 0.75s debounce) unless deflected or absorbed by shield.
+    * **Cyberspace Bullet Hell Rings (Phase 2 Overdrive):** Ventral reactor core releases radial rings of 12 cyberspace energy projectiles (48 m/s) every 4.5s at alternating pitch angles, creating an evasive bullet hell wave.
+    * **Barrel Roll Deflection:** Timed barrel rolls deflect both boss seeker missiles and tracer/cyberspace bullets, awarding +5 Style Points for close calls.
+  - **Procedural 3D Bullet Entities (`public/js/entities.js`):**
+    * Added `BossBullet` class rendering both kinetic tracer slugs (cylindrical glowing orange rounds) and cyberspace energy rings (spinning neon cyan/magenta toruses with glowing cores and trailing particle sparks).
+    * Synchronized at 20Hz network snapshot replication with smooth client-side interpolation and disposal on despawn.
+  - **Dynamic Audio Synthesis (`public/js/audio.js`):**
+    * `bossTurretBurst(volume)`: Rapid rotary autocannon burst with punchy transients.
+    * `bossMissileSwarm(count, volume)`: Multi-stage vertical rocket motor ignition whooshes.
+    * `bossRingWave(volume)`: Sub-bass resonant FM cyber shockwave.
+    * `bossBulletHit(isRing, volume)`: Metallic spark impact / deflection ping.
+  - **Wingman Bot AI Enhancements (`server.js`):**
+    * Bots maintain tactical break-away distance (>75m) to avoid collisions with the Dreadnought hull.
+    * Bots detect incoming titan missiles within 55m and automatically execute barrel rolls to deflect them.
+  - **Automated Tests:** Updated `test/boss.test.js` with pilot/wingmen HP scaling and Sonic Frontiers attack specifications. 58 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
 - Optional future enhancements:

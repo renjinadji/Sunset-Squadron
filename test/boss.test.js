@@ -42,18 +42,21 @@ test('boss is a first-class leaderboard mode with win tracking', async () => {
   assert.strictEqual(summary.modes.boss[0].name, 'Ace');
 });
 
-test('boss raid HP scaling scales with human player count', () => {
-  const BOSS_BASE_HP = 500;
-  const calcMaxHp = (numHumans) => BOSS_BASE_HP + Math.max(0, numHumans - 1) * 100;
+test('boss raid HP scaling scales with total pilot count (humans and wingmen bots)', () => {
+  const BOSS_BASE_HP = 800;
+  const BOSS_HP_PER_PILOT = 250;
+  const calcMaxHp = (totalPilots) => BOSS_BASE_HP + Math.max(0, totalPilots - 1) * BOSS_HP_PER_PILOT;
 
-  assert.strictEqual(calcMaxHp(1), 500, 'Solo player faces 500 HP');
-  assert.strictEqual(calcMaxHp(2), 600, '2 players face 600 HP');
-  assert.strictEqual(calcMaxHp(4), 800, 'Squadron of 4 faces 800 HP');
-  assert.strictEqual(calcMaxHp(8), 1200, 'Full lobby of 8 faces 1200 HP');
+  assert.strictEqual(calcMaxHp(1), 800, 'Solo player faces 800 HP');
+  assert.strictEqual(calcMaxHp(2), 1050, '2 pilots (human + wingman) face 1050 HP');
+  assert.strictEqual(calcMaxHp(4), 1550, 'Squadron of 4 pilots faces 1550 HP');
+  assert.strictEqual(calcMaxHp(5), 1800, 'Squadron of 1 human + 4 AI wingmen faces 1800 HP');
+  assert.strictEqual(calcMaxHp(8), 2550, 'Full squadron of 8 pilots faces 2550 HP');
 });
 
-test('boss damage and phase transition logic', () => {
-  const maxHp = 500;
+test('boss damage and phase transition logic (Overdrive Phase 2 at 50% HP)', () => {
+  const BOSS_BASE_HP = 800;
+  const maxHp = BOSS_BASE_HP;
   let hp = maxHp;
   let phase = 1;
   let enraged = false;
@@ -64,23 +67,48 @@ test('boss damage and phase transition logic', () => {
     if (phase === 1 && hp <= Math.round(maxHp * 0.5)) {
       phase = 2;
       enraged = true;
-      speed = 27;
+      speed = 28;
     }
   }
 
   // Phase 1 tests
-  applyDamage(100);
-  assert.strictEqual(hp, 400);
+  applyDamage(150);
+  assert.strictEqual(hp, 650);
   assert.strictEqual(phase, 1);
   assert.strictEqual(enraged, false);
   assert.strictEqual(speed, 18);
 
-  // Cross 50% threshold (250 HP)
-  applyDamage(160);
-  assert.strictEqual(hp, 240);
+  // Cross 50% threshold (400 HP)
+  applyDamage(260);
+  assert.strictEqual(hp, 390);
   assert.strictEqual(phase, 2, 'Transitions to Phase 2 at <= 50% HP');
   assert.strictEqual(enraged, true);
-  assert.strictEqual(speed, 27, 'Speed accelerates in Overdrive');
+  assert.strictEqual(speed, 28, 'Speed accelerates to 28 m/s in Overdrive');
+});
+
+test('boss Sonic Frontiers attack specifications and bullet physics', () => {
+  const BOSS_BULLET_SPEED = 125;
+  const BOSS_BULLET_LIFE = 2.4;
+  const BOSS_BULLET_HIT_R = 5.2;
+
+  // Test tracer bullet travel distance over lifetime
+  const maxRange = BOSS_BULLET_SPEED * BOSS_BULLET_LIFE;
+  assert.strictEqual(maxRange, 300, 'Tracer bullets travel up to 300 meters');
+
+  // Barrel roll defense deflects bullets and missiles
+  const isDeflected = (playerRollingUntil, now) => playerRollingUntil > now;
+  assert.strictEqual(isDeflected(10.5, 10.0), true, 'Active barrel roll deflects boss projectiles');
+  assert.strictEqual(isDeflected(9.5, 10.0), false, 'Normal flight takes projectile hit');
+
+  // Ring wave cyberspace bullet hell creates 12 projectiles around 360 deg
+  const ringAngles = [];
+  const ringCount = 12;
+  for (let i = 0; i < ringCount; i++) {
+    ringAngles.push((i / ringCount) * Math.PI * 2);
+  }
+  assert.strictEqual(ringAngles.length, 12);
+  assert.strictEqual(ringAngles[0], 0);
+  assert.strictEqual(ringAngles[6], Math.PI);
 });
 
 test('boss weapon damage specifications: rocket regular, rocket crit, mine, and ramming', () => {

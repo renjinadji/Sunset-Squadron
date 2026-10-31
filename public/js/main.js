@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Graphics, ParticleSystem, PRESETS } from './graphics.js';
 import { World, islandCollision, WATER_LEVEL, WORLD_RADIUS, CEILING } from './world.js';
-import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
+import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, BossBullet, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
 import { Controls } from './controls.js';
 import { SoundEngine } from './audio.js';
 import { PILOTS, PERKS, POWERUPS, pilotById, perkMultipliers, hexCss } from './pilots-data.js';
@@ -184,6 +184,7 @@ const decoys = new Map();   // id -> { jet: Jet, pos: Vector3, quat: Quaternion,
 const meteors = new Map();  // id -> { mesh: Meteor } (Meteor Shower event)
 let blimpMesh = null;            // Boss Blimp event
 let bossMesh = null;             // Sky Dreadnought Boss Raid
+const bossBullets = new Map();   // id -> { mesh: BossBullet, pos, dir, isRing }
 let crown = null;
 let teamCrowns = null;          // Red vs Blue: {red: Crown, blue: Crown}
 let teamRibbons = null;         // Red vs Blue: {red: Ribbon, blue: Ribbon}
@@ -644,6 +645,23 @@ function connectSocket() {
     const killerName = killer ? killer.name : 'A brave pilot';
     showBanner(`💥 SKY DREADNOUGHT DESTROYED! (+${data.points} PTS)`, 5.0);
     addFeed(`💥 Sky Dreadnought brought down by ${killerName}!`);
+  });
+  socket.on('bossTurretFire', (data) => {
+    const d = data.p ? distToMe(data.p) : 250;
+    sound.bossTurretBurst(volumeForDistance(d));
+    if (bossMesh && typeof data.turretIdx === 'number') {
+      bossMesh.fireTurret(data.turretIdx);
+    }
+  });
+  socket.on('bossMissilesFired', (data) => {
+    const d = data.pos ? distToMe(data.pos) : 250;
+    sound.bossMissileSwarm(data.count || 2, volumeForDistance(d));
+    if (bossMesh) bossMesh.fireMissiles();
+  });
+  socket.on('bossRingWave', (data) => {
+    const d = data.p ? distToMe(data.p) : 250;
+    sound.bossRingWave(volumeForDistance(d));
+    gfx.addShake(0.65);
   });
   socket.on('sponsorAnnouncement', ({ sponsor, message }) => {
     sound.fanfare(0.8);
@@ -1639,6 +1657,11 @@ function endRound(results) {
   game.event = null;
   removeGoldBalloon();
   hideEventPill();
+  for (const b of bossBullets.values()) {
+    gfx.scene.remove(b.mesh.group);
+    b.mesh.dispose();
+  }
+  bossBullets.clear();
   if (results.mode === 'teams') {
     // Red vs Blue: the headline is the team result, not the top individual
     const ts = results.teams || { red: 0, blue: 0 };
@@ -1905,6 +1928,30 @@ function onSnapshot(snap) {
     ui.bossHpNumbers.textContent = `${snap.boss.hp} / ${snap.boss.mh} HP`;
     ui.bossHpFill.style.width = `${Math.max(0, Math.min(100, Math.round((snap.boss.hp / snap.boss.mh) * 100)))}%`;
   }
+  // Boss Bullets (tracer rounds & cyberspace rings)
+  const seenBb = new Set();
+  for (const bk of (snap.bossBullets || [])) {
+    seenBb.add(bk.id);
+    let b = bossBullets.get(bk.id);
+    if (!b) {
+      const mesh = new BossBullet(Boolean(bk.r));
+      mesh.setPosition(bk.p[0], bk.p[1], bk.p[2]);
+      if (bk.d) mesh.setDirection(new THREE.Vector3(bk.d[0], bk.d[1], bk.d[2]));
+      gfx.scene.add(mesh.group);
+      b = { mesh, pos: new THREE.Vector3(bk.p[0], bk.p[1], bk.p[2]), dir: new THREE.Vector3(bk.d[0], bk.d[1], bk.d[2]), isRing: Boolean(bk.r) };
+      bossBullets.set(bk.id, b);
+    } else {
+      b.pos.set(bk.p[0], bk.p[1], bk.p[2]);
+      if (bk.d) b.dir.set(bk.d[0], bk.d[1], bk.d[2]);
+    }
+  }
+  for (const [id, b] of bossBullets) {
+    if (!seenBb.has(id)) {
+      gfx.scene.remove(b.mesh.group);
+      b.mesh.dispose();
+      bossBullets.delete(id);
+    }
+  }
   // Crown + ribbon
   if (crown) {
     if (!snap.crownHolderId) crown.group.position.lerp(arrToV(snap.crownPos), 0.5);
@@ -1955,11 +2002,20 @@ function onHit(e) {
   gfx.particles.burst(p, 18, 10, { colors: GOLD_COLORS, life: 0.8, size: 1.6 });
   sound.fireworkPop(volumeForDistance(p.distanceTo(me.pos)));
   if (e.victim === game.myId) {
-    me.tumble = 0.6;
-    gfx.addShake(0.9);
-    if (e.meteor) addFeed('Meteor strike! You tumbled!');
-    else if (e.mine) addFeed(`${nameOf(e.shooter)}'s sky mine hit you!`);
-    else addFeed(e.crownStolen ? `${nameOf(e.shooter)} stole your crown!` : `${nameOf(e.shooter)} tagged you with a firework!`);
+    me.tumble = e.bullet ? 0.45 : 0.6;
+    gfx.addShake(e.bullet ? 0.7 : 0.9);
+    if (e.bullet) {
+      sound.bossBulletHit(Boolean(e.isRing));
+      addFeed(e.isRing ? '⚠️ Titan Cyberspace Ring clipped your jet!' : '⚠️ Titan Autocannon hit your jet!');
+    } else if (e.shooter === 'boss') {
+      addFeed('⚠️ Titan Homing Missile struck your jet!');
+    } else if (e.meteor) {
+      addFeed('Meteor strike! You tumbled!');
+    } else if (e.mine) {
+      addFeed(`${nameOf(e.shooter)}'s sky mine hit you!`);
+    } else {
+      addFeed(e.crownStolen ? `${nameOf(e.shooter)} stole your crown!` : `${nameOf(e.shooter)} tagged you with a firework!`);
+    }
   } else if (e.shooter === game.myId) {
     if (e.mine) addFeed(`Your sky mine struck ${nameOf(e.victim)}!`);
     else addFeed(e.crownStolen ? `You stole the crown from ${nameOf(e.victim)}!` : `Direct hit on ${nameOf(e.victim)}!`);
@@ -2665,6 +2721,7 @@ function updateMissileWarningSystem() {
           pos: rPos,
           dist: d,
           homing: isLockedOnMe,
+          isBoss: (r.owner === 'boss'),
           critical: d < 45 || (d / (ROCKET_SPEED * Math.max(0.3, align)) < 0.65),
         };
       }
@@ -2688,10 +2745,12 @@ function updateMissileWarningSystem() {
   if (ui.hudMissileWarning && !ui.hudMissileWarning.classList.contains('deflected')) {
     ui.hudMissileWarning.classList.remove('hidden');
     ui.hudMissileWarning.classList.toggle('critical', bestThreat.critical);
+    const isBossMissile = bestThreat.isBoss;
     ui.warningTitle.textContent = bestThreat.critical
-      ? '⚠️ EVADE NOW!'
-      : (bestThreat.homing ? '⚠️ MISSILE LOCKED' : '⚠️ MISSILE INBOUND');
+      ? (isBossMissile ? '⚠️ TITAN MISSILE — EVADE NOW!' : '⚠️ EVADE NOW!')
+      : (isBossMissile ? '⚠️ TITAN MISSILE LOCK!' : (bestThreat.homing ? '⚠️ MISSILE LOCKED' : '⚠️ MISSILE INBOUND'));
     ui.warningDist.textContent = `${Math.round(bestThreat.dist)}m`;
+    ui.warningHint.textContent = isBossMissile ? 'BARREL ROLL TO DEFLECT' : 'BARREL ROLL OR G-TURN';
     ui.warningHint.textContent = bestThreat.critical ? 'DOUBLE-TAP ROLL / [Q]' : 'INCOMING FIREWORK';
   }
 
@@ -2756,6 +2815,11 @@ function stepRemote(dt) {
       bossMesh.group.position.lerp(arrToV(game.lastSnap.boss.p), 0.4);
       if (typeof game.lastSnap.boss.yaw === 'number') bossMesh.group.rotation.y = game.lastSnap.boss.yaw;
     }
+  }
+  for (const b of bossBullets.values()) {
+    b.mesh.group.position.lerp(b.pos, 0.45);
+    b.mesh.setDirection(b.dir);
+    b.mesh.update(dt, gfx.particles);
   }
   if (goldBalloonMesh) goldBalloonMesh.update(dt, t);
   for (const k of pickups.values()) if (k.alive) k.mesh.update(dt, t, k.mesh.group.position.distanceTo(gfx.camera.position) < 350 ? gfx.particles : null);

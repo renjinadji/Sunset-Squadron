@@ -683,6 +683,74 @@ export class SoundEngine {
     });
   }
 
+  bossTurretBurst(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const st = t + i * 0.065;
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520, st);
+      o.frequency.exponentialRampToValueAtTime(75, st + 0.05);
+      const g = ctx.createGain();
+      this._env(g, st, 0.18 * volume, 0.002, 0.05);
+      o.connect(g).connect(this.master);
+      o.start(st);
+      o.stop(st + 0.06);
+    }
+  }
+
+  bossMissileSwarm(count = 2, volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (let i = 0; i < count; i++) {
+      const st = t + i * 0.08;
+      const noise = this._noiseSource(false);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(320, st);
+      bp.frequency.exponentialRampToValueAtTime(1500, st + 0.25);
+      bp.Q.value = 2.4;
+      const g = ctx.createGain();
+      this._env(g, st, 0.22 * volume, 0.02, 0.35);
+      noise.connect(bp).connect(g).connect(this.master);
+      noise.start(st);
+      noise.stop(st + 0.4);
+    }
+  }
+
+  bossRingWave(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(130, t);
+    o.frequency.linearRampToValueAtTime(45, t + 0.6);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(800, t);
+    lp.frequency.exponentialRampToValueAtTime(90, t + 0.75);
+    const g = ctx.createGain();
+    this._env(g, t, 0.35 * volume, 0.03, 0.75);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.8);
+  }
+
+  bossBulletHit(isRing = false, volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = isRing ? 'sine' : 'square';
+    o.frequency.setValueAtTime(isRing ? 720 : 360, t);
+    o.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    const g = ctx.createGain();
+    this._env(g, t, (isRing ? 0.25 : 0.2) * volume, 0.002, 0.12);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.14);
+  }
+
   /** Close shave: a rocket-rock whoosh whipping past the canopy. */
   closeShave(volume = 1) {
     if (!this.ctx || this.muted) return;
