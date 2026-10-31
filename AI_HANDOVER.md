@@ -883,12 +883,43 @@
   - **Testing & Deployment:**
     - 51/51 automated unit/integration tests passing (`npm test`). Syntax validated via `npm run check`.
     - Restarted `sunset-squadron.service` and pushed commit `95c8df2` to `renjinadji/Sunset-Squadron`.
+- **Sky Credits (★ CR) & In-Game Cosmetic Shop Engine — Phase 4 (Hangar UI, 3D Turntable Preview, Sponsors & Credit Receipt):**
+  - **Lobby Header & Roster Badges (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    - Displayed gold pill for player's current Sky Credits (`★ 0 CR`) next to touch-friendly `🛠️ HANGAR SHOP` button in the lobby top row.
+    - Animated `NEW` badge on Hangar button when player balance can afford locked cosmetic items (`checkAffordableNewItems`).
+    - Lobby roster cards render player portraits with procedural visor flair, cosmetic airframe tags (`WING`, `FINISH`), and party sponsor badge (`🎉 SPONSOR`).
+    - Added top lobby sponsor banner and quick-action sponsor strip in roster panel.
+  - **Split-Screen iPad Hangar & Shop Modal (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    - Left Column (Interactive 3D Turntable & Live Portrait Card):
+      * Integrated dedicated Three.js WebGL turntable viewport (`#hangar-turntable-canvas`) with auto-rotation, smooth touch/pointer drag interaction for pitch/yaw, and live reactive cosmetic mesh and material rebuilding.
+      * Dynamic visual effect previews: trail selection triggers animated booster contrail/wake simulation; firework warheads trigger live in-viewport particle detonations; voice selections trigger procedural Web Audio synthesis (`sound.pilotChatter`).
+      * Live 2D pilot portrait canvas (`#hangar-portrait-canvas`) dynamically updating with previewed visor flair and pilot callsign.
+      * Real-time loadout chips showing currently equipped and previewed items across all categories.
+    - Right Column (Category Tabs & Procedural Catalog Grid):
+      * 7 Category Tabs: `Wings`, `Paint`, `Trails`, `Fireworks`, `Voices`, `Visors`, and `🎉 Sponsors`.
+      * Procedural item cards with prices, descriptions, and state-aware action buttons:
+        - `EQUIPPED ✓` (green/gold, disabled)
+        - `EQUIP` (cyan highlight, equips unlocked item via `shop:equip` and plays `playShopEquip()`)
+        - `BUY ★ [Price]` (gold gradient, purchases via `shop:buy`, unlocks and equips immediately, plays `playShopBuy()`)
+        - `NEED ★ [Amount] MORE` (dimmed, displays exact credits needed)
+    - Responsive layout optimized for iPad landscape viewports and mobile screens.
+  - **Round Sponsor System Integration (`public/js/main.js`):**
+    - Allows players to activate communal modifiers (`ROUND_SPONSORS`) from the `🎉 Sponsors` tab or the lobby quick-action strip.
+    - Emits `shop:sponsor`, announces party sponsor across the lobby with fanfare and banner notifications, and displays sponsor details at round start (`⚡ ROUND SPONSORED BY [NAME]: [SPONSOR]!`).
+  - **Round-End Sky Credits Receipt & Roll-Up Animation (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    - Post-match breakdown card on results screen displaying itemized credit earnings: `Base Finish`, `Score Bonus`, `Style & Stunts`, `Mid-Round Event`, `Personal Best`, `Underdog Rally`, and `Golden Skies Multiplier`.
+    - Smooth count-up animation rolling from previous balance to new wallet balance with procedural `playCreditTick()` audio synthesis.
+    - Refreshes wallet displays and updates affordable item alerts.
+  - **Testing & Deployment:**
+    - 51/51 automated unit/integration tests passing (`npm test`). Syntax validated across client and server via `npm run check`.
+    - Restarted `sunset-squadron.service` and confirmed HTTP 200 on all endpoints and clean systemd logs.
 
 ### Pending / Next Up
-- **Phase 4 (Hangar / Shop UI & End-of-Round Victory Breakdown):**
-  - Build the interactive Shop / Hangar modal dialog in `public/index.html` & `public/style.css` (Tabs: Wings, Finishes, Trails, Warheads, Voices, Visors, Sponsors) with 3D jet inspection preview, credit balance display, and Buy / Equip / Sponsor actions.
-  - Display the celebratory end-of-round Sky Credits payout breakdown modal (`baseFinish`, `scoreBonus`, `styleBonus`, `eventBonus`, `pbBonus`, `underdogBonus`, `sponsorMultiplier`) with roll-up credit audio ticks on the results screen.
-- Optional: configure reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
+- All four phases of the Sky Credits & Procedural Cosmetic Shop engine are complete!
+- Optional future enhancements:
+  * Additional procedural finish shaders or animated particle styles.
+  * Additional party sponsor modifiers (e.g. low-gravity floating isles, mirror course).
+  * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
 
 ### Notes / Warnings
 - Game server runs as systemd service `sunset-squadron.service` on port 3000. Logs accessible via `journalctl -u sunset-squadron.service -f`.

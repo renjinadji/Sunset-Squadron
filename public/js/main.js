@@ -1,13 +1,14 @@
 // main.js - game state machine, Socket.io client, 60fps render + local flight prediction,
 // remote interpolation, HUD and lobby wiring.
 import * as THREE from 'three';
-import { Graphics, PRESETS } from './graphics.js';
+import { Graphics, ParticleSystem, PRESETS } from './graphics.js';
 import { World, islandCollision, WATER_LEVEL, WORLD_RADIUS, CEILING } from './world.js';
 import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
 import { Controls } from './controls.js';
 import { SoundEngine } from './audio.js';
 import { PILOTS, PERKS, POWERUPS, pilotById, perkMultipliers, hexCss } from './pilots-data.js';
-import { portraitCanvas, portraitElement } from './portraits.js';
+import { portraitCanvas, portraitElement, drawPortrait } from './portraits.js';
+import { SHOP_CATEGORIES, DEFAULT_EQUIPPED, SHOP_ITEMS, ROUND_SPONSORS, itemById, itemsByCategory, sponsorById, isDefaultItem } from './shop-data.js';
 
 // ---------------------------------------------------------------------------
 // Constants shared with the server flight model
@@ -78,6 +79,14 @@ const ui = {
   lbTabs: $('lb-tabs'), lbBody: $('lb-body'), lbHint: $('lb-hint'),
   btnLaunch: $('btn-launch'), btnStart: $('btn-start'), joinError: $('join-error'), hostWait: $('host-wait'),
   modeToggle: $('mode-toggle'), presetToggle: $('preset-toggle'), botsToggle: $('bots-toggle'),
+  lobbyCreditsVal: $('lobby-credits-val'), btnOpenHangar: $('btn-open-hangar'), hangarNewBadge: $('hangar-new-badge'),
+  lobbySponsorBanner: $('lobby-sponsor-banner'), lobbySponsorText: $('lobby-sponsor-text'),
+  rosterSponsorStrip: $('roster-sponsor-strip'), rosterSponsorDesc: $('roster-sponsor-desc'), btnQuickSponsor: $('btn-quick-sponsor'),
+  hangarModal: $('hangar-modal'), hangarCreditsVal: $('hangar-credits-val'), btnCloseHangar: $('btn-close-hangar'),
+  hangarTabs: $('hangar-tabs'), hangarGrid: $('hangar-grid'),
+  hangarTurntableCanvas: $('hangar-turntable-canvas'), hangarPortraitCanvas: $('hangar-portrait-canvas'),
+  hangarPilotCallsign: $('hangar-pilot-callsign'), hangarVisorStyle: $('hangar-visor-style'),
+  previewItemName: $('preview-item-name'), previewDesc: $('preview-desc'), previewEquippedChips: $('preview-equipped-chips'),
   hudMode: $('hud-mode'), hudTimer: $('hud-timer'), hudCrown: $('hud-crown'), hudName: $('hud-name'), hudCallsign: $('hud-callsign'), hudPortrait: $('hud-portrait'), hudScore: $('hud-score'),
   hudStamina: $('hud-stamina'), hudCooldown: $('hud-cooldown'), hudSpeed: $('hud-speed'), hudBoard: $('hud-board'), hudPowerups: $('hud-powerups'),
   hudWeather: $('hud-weather'),
@@ -86,6 +95,7 @@ const ui = {
   threatVignette: $('threat-vignette'), missileArrow: $('missile-arrow'), missileArrowLabel: $('missile-arrow-label'),
   hudMissileWarning: $('hud-missile-warning'), warningTitle: $('warning-title'), warningDist: $('warning-dist'), warningHint: $('warning-hint'),
   resultsTitle: $('results-title'), resultsList: $('results-list'), resultsBests: $('results-bests'),
+  resultsReceipt: $('results-receipt'), receiptTotalPayout: $('receipt-total-payout'), receiptBreakdown: $('receipt-breakdown'), receiptBalanceVal: $('receipt-balance-val'),
   joyBase: $('joy-base'), joyKnob: $('joy-knob'), btnBoost: $('btn-boost'), btnFire: $('btn-fire'),
   emoteBar: $('emote-bar'),
 };
@@ -113,6 +123,15 @@ const game = {
   rosterEditing: false,
   mode: 'crown',
   preset: 'sunset',
+  myCredits: 0,
+  myUnlocked: [],
+  myEquipped: { ...DEFAULT_EQUIPPED },
+  hangarOpen: false,
+  hangarTab: 'wing',
+  previewEquipped: { ...DEFAULT_EQUIPPED },
+  previewingItemId: null,
+  activeRoundSponsor: null,
+  hasAffordableNewItems: false,
   weather: null,
   windVec: new THREE.Vector3(),
   seed: 1,
@@ -244,6 +263,7 @@ function selectPilot(id, fromRoster) {
   renderPilotDetail(pilot);
   sound.blip(520 + PILOTS.indexOf(pilot) * 40, 0.4);
   if (fromRoster && socket && game.joined) socket.emit('setPilot', { pilot: pilot.id });
+  if (game.hangarOpen) updateHangarPreview();
 }
 
 function buildPickers() {
@@ -353,6 +373,19 @@ async function loadHostInfo() {
 function renderRoster(lobby) {
   game.lobby = lobby;
   const isHost = lobby.hostId === game.myId;
+  const sponsor = lobby.roundSponsor || lobby.activeRoundSponsor || null;
+  game.activeRoundSponsor = sponsor;
+  showLobbySponsorBanner(sponsor);
+
+  const mePlayer = lobby.players.find((p) => p.id === game.myId);
+  if (mePlayer) {
+    if (mePlayer.credits !== undefined) game.myCredits = mePlayer.credits;
+    if (mePlayer.equipped) game.myEquipped = { ...mePlayer.equipped };
+    if (mePlayer.unlocked) game.myUnlocked = mePlayer.unlocked;
+    updateWalletDisplay();
+    checkAffordableNewItems();
+  }
+
   ui.roster.innerHTML = '';
   for (const p of lobby.players) {
     const prev = game.names.get(p.id) || {};
@@ -374,6 +407,33 @@ function renderRoster(lobby) {
     cs.textContent = `${pilot.callsign} · ${PERKS[pilot.perk].label}`;
     txt.appendChild(nm);
     txt.appendChild(cs);
+
+    // Cosmetic & sponsor badges
+    if (sponsor && (sponsor.sponsoredById === p.id || sponsor.sponsoredBy === p.name)) {
+      const spTag = document.createElement('span');
+      spTag.className = 'tag cosmetic-tag sponsor-tag';
+      spTag.textContent = '🎉 SPONSOR';
+      txt.appendChild(spTag);
+    }
+    if (equipped && equipped.wing && equipped.wing !== 'wing_default') {
+      const w = itemById(equipped.wing);
+      if (w) {
+        const wTag = document.createElement('span');
+        wTag.className = 'tag cosmetic-tag wing-tag';
+        wTag.textContent = w.name.split(' ')[0].toUpperCase();
+        txt.appendChild(wTag);
+      }
+    }
+    if (equipped && equipped.finish && equipped.finish !== 'finish_default') {
+      const f = itemById(equipped.finish);
+      if (f) {
+        const fTag = document.createElement('span');
+        fTag.className = 'tag cosmetic-tag finish-tag';
+        fTag.textContent = f.name.split(' ')[0].toUpperCase();
+        txt.appendChild(fTag);
+      }
+    }
+
     li.appendChild(txt);
     if (p.id === lobby.hostId) {
       const tag = document.createElement('span');
@@ -498,6 +558,19 @@ function connectSocket() {
   socket.on('gate', (e) => onGate(e));
   socket.on('finish', (e) => onFinish(e));
   socket.on('crown', (e) => onCrownEvent(e));
+  socket.on('sponsorAnnouncement', ({ sponsor, message }) => {
+    sound.fanfare(0.8);
+    if (game.lobby) {
+      game.lobby.roundSponsor = sponsor;
+      game.lobby.activeRoundSponsor = sponsor;
+      renderRoster(game.lobby);
+    }
+    showLobbySponsorBanner(sponsor);
+    if (game.phase === 'playing') {
+      showBanner(`⚡ ROUND SPONSORED BY ${sponsor.sponsoredBy.toUpperCase()}: ${sponsor.name.toUpperCase()}!`, 4.5);
+    }
+    addFeed(`🎉 ${message}`);
+  });
   socket.on('playerEquip', ({ id, equipped }) => {
     const n = game.names.get(id);
     if (n) n.equipped = equipped;
@@ -574,7 +647,591 @@ function doJoin() {
     ui.joinError.textContent = '';
     ui.pilotSetup.classList.add('hidden');
     ui.rosterPanel.classList.remove('hidden');
-    renderRoster(ack.lobby);
+    if (ack.lobby) {
+      renderRoster(ack.lobby);
+    }
+    socket.emit('shop:get', (res) => {
+      if (res && res.wallet) {
+        game.myCredits = res.wallet.credits;
+        game.myUnlocked = res.wallet.unlocked || [];
+        game.myEquipped = { ...res.wallet.equipped };
+        if (res.activeRoundSponsor) {
+          game.activeRoundSponsor = res.activeRoundSponsor;
+          showLobbySponsorBanner(res.activeRoundSponsor);
+        }
+        updateWalletDisplay();
+        checkAffordableNewItems();
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Hangar Shop, 3D Turntable Preview, Sponsors & Credit Receipts
+// ---------------------------------------------------------------------------
+function updateWalletDisplay() {
+  if (ui.lobbyCreditsVal) ui.lobbyCreditsVal.textContent = String(game.myCredits);
+  if (ui.hangarCreditsVal) ui.hangarCreditsVal.textContent = String(game.myCredits);
+}
+
+function checkAffordableNewItems() {
+  const hasAffordable = SHOP_ITEMS.some((item) => {
+    if (isDefaultItem(item.id)) return false;
+    if (game.myUnlocked && game.myUnlocked.includes(item.id)) return false;
+    return game.myCredits >= item.price;
+  });
+  game.hasAffordableNewItems = hasAffordable;
+  if (ui.hangarNewBadge) {
+    ui.hangarNewBadge.classList.toggle('hidden', !hasAffordable);
+  }
+}
+
+function showLobbySponsorBanner(sponsor) {
+  if (!ui.lobbySponsorBanner || !ui.rosterSponsorStrip) return;
+  if (sponsor) {
+    ui.lobbySponsorBanner.classList.remove('hidden');
+    if (ui.lobbySponsorText) {
+      ui.lobbySponsorText.textContent = `ROUND SPONSORED BY ${sponsor.sponsoredBy.toUpperCase()}: ${sponsor.name.toUpperCase()} — ${sponsor.description}`;
+    }
+    if (ui.rosterSponsorDesc) {
+      ui.rosterSponsorDesc.textContent = `Active: ${sponsor.name} (${sponsor.sponsoredBy})`;
+    }
+    if (ui.btnQuickSponsor) {
+      ui.btnQuickSponsor.textContent = 'SPONSORED ✓';
+      ui.btnQuickSponsor.disabled = true;
+    }
+  } else {
+    ui.lobbySponsorBanner.classList.add('hidden');
+    if (ui.rosterSponsorDesc) {
+      ui.rosterSponsorDesc.textContent = 'No party sponsor active for next match';
+    }
+    if (ui.btnQuickSponsor) {
+      ui.btnQuickSponsor.textContent = 'SPONSOR MATCH';
+      ui.btnQuickSponsor.disabled = false;
+    }
+  }
+}
+
+let turntableRenderer = null;
+let turntableScene = null;
+let turntableCamera = null;
+let turntableParticles = null;
+let turntableJet = null;
+let turntableRaf = null;
+let turntableYaw = 0.5;
+let turntablePitch = 0.12;
+let turntableDragging = false;
+let turntableLastX = 0;
+let turntableLastY = 0;
+let previewBoostTimer = 0;
+let lastTurntableTime = performance.now();
+
+function initHangarTurntable() {
+  if (turntableRenderer) return;
+  if (!ui.hangarTurntableCanvas) return;
+
+  turntableRenderer = new THREE.WebGLRenderer({
+    canvas: ui.hangarTurntableCanvas,
+    alpha: true,
+    antialias: true,
+    powerPreference: 'high-performance',
+  });
+  turntableRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  turntableScene = new THREE.Scene();
+
+  const ambient = new THREE.AmbientLight(0xfff6ea, 1.0);
+  turntableScene.add(ambient);
+
+  const keyLight = new THREE.DirectionalLight(0xffeedd, 1.4);
+  keyLight.position.set(6, 9, 8);
+  turntableScene.add(keyLight);
+
+  const fillLight = new THREE.DirectionalLight(0x7fcfff, 0.85);
+  fillLight.position.set(-7, -2, -5);
+  turntableScene.add(fillLight);
+
+  turntableCamera = new THREE.PerspectiveCamera(40, 460 / 320, 0.1, 100);
+  turntableCamera.position.set(0, 1.2, 9.8);
+  turntableCamera.lookAt(0, 0, 0);
+
+  turntableParticles = new ParticleSystem(turntableScene);
+
+  const canvas = ui.hangarTurntableCanvas;
+  canvas.addEventListener('pointerdown', (e) => {
+    turntableDragging = true;
+    turntableLastX = e.clientX;
+    turntableLastY = e.clientY;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!turntableDragging) return;
+    const dx = e.clientX - turntableLastX;
+    const dy = e.clientY - turntableLastY;
+    turntableLastX = e.clientX;
+    turntableLastY = e.clientY;
+    turntableYaw += dx * 0.015;
+    turntablePitch = Math.max(-0.55, Math.min(0.55, turntablePitch + dy * 0.01));
+  });
+
+  const stopDrag = (e) => {
+    turntableDragging = false;
+    try { if (e && e.pointerId) canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+}
+
+function resizeTurntable() {
+  if (!turntableRenderer || !ui.hangarTurntableCanvas || !turntableCamera) return;
+  const rect = ui.hangarTurntableCanvas.getBoundingClientRect();
+  const w = Math.max(180, Math.floor(rect.width || 460));
+  const h = Math.max(140, Math.floor(rect.height || 320));
+  turntableRenderer.setSize(w, h, false);
+  turntableCamera.aspect = w / h;
+  turntableCamera.updateProjectionMatrix();
+}
+
+function startTurntable() {
+  if (turntableRaf) cancelAnimationFrame(turntableRaf);
+  lastTurntableTime = performance.now();
+  resizeTurntable();
+
+  function animateTurntable(now) {
+    if (!game.hangarOpen) return;
+    const dt = Math.min(0.1, (now - lastTurntableTime) / 1000);
+    lastTurntableTime = now;
+
+    if (!turntableDragging) {
+      turntableYaw += dt * 0.45;
+    }
+
+    if (previewBoostTimer > 0) {
+      previewBoostTimer = Math.max(0, previewBoostTimer - dt);
+    }
+
+    if (turntableJet) {
+      turntableJet.group.rotation.set(turntablePitch, turntableYaw, 0);
+      turntableJet.updateVisual(dt, { boost: previewBoostTimer > 0, super: false, tumble: 0 }, turntableParticles, now / 1000);
+    }
+
+    if (turntableParticles) {
+      turntableParticles.update(dt);
+    }
+
+    if (turntableRenderer && turntableScene && turntableCamera) {
+      turntableRenderer.render(turntableScene, turntableCamera);
+    }
+
+    turntableRaf = requestAnimationFrame(animateTurntable);
+  }
+  turntableRaf = requestAnimationFrame(animateTurntable);
+}
+
+function stopTurntable() {
+  if (turntableRaf) {
+    cancelAnimationFrame(turntableRaf);
+    turntableRaf = null;
+  }
+}
+
+function updateHangarPreview() {
+  initHangarTurntable();
+  const pilot = pilotById(game.pilotId);
+  const eq = game.previewEquipped;
+
+  if (ui.hangarPortraitCanvas) {
+    drawPortrait(pilot, 68, ui.hangarPortraitCanvas, eq);
+  }
+  if (ui.hangarPilotCallsign) {
+    ui.hangarPilotCallsign.textContent = pilot.callsign;
+  }
+  if (ui.hangarVisorStyle) {
+    const vItem = itemById(eq.visor);
+    ui.hangarVisorStyle.textContent = vItem ? vItem.name : 'Standard Visor';
+  }
+
+  if (!turntableJet || turntableJet.pilot.id !== pilot.id) {
+    if (turntableJet) {
+      turntableScene.remove(turntableJet.group);
+      turntableJet.dispose();
+    }
+    turntableJet = new Jet(pilot, pilot.callsign, null, eq);
+    if (turntableJet.label) turntableJet.label.visible = false;
+    turntableScene.add(turntableJet.group);
+  } else {
+    turntableJet.setEquipped(eq);
+    if (turntableJet.label) turntableJet.label.visible = false;
+  }
+
+  updateLoadoutChips();
+}
+
+function updateLoadoutChips() {
+  if (!ui.previewEquippedChips) return;
+  ui.previewEquippedChips.innerHTML = '';
+  for (const cat of SHOP_CATEGORIES) {
+    const itemId = game.previewEquipped[cat] || game.myEquipped[cat];
+    const item = itemById(itemId);
+    const chip = document.createElement('span');
+    chip.className = 'loadout-chip';
+    const shortName = item ? item.name.split(' ')[0] : 'STD';
+    chip.textContent = `${cat.toUpperCase()}: ${shortName}`;
+    ui.previewEquippedChips.appendChild(chip);
+  }
+}
+
+function previewItem(item) {
+  if (!item) return;
+  game.previewingItemId = item.id;
+  if (ui.previewItemName) ui.previewItemName.textContent = item.name;
+  if (ui.previewDesc) ui.previewDesc.textContent = item.description;
+
+  if (item.category === 'sponsors') {
+    sound.blip(520, 0.3);
+    renderHangarGrid();
+    return;
+  }
+
+  game.previewEquipped[item.category] = item.id;
+  updateHangarPreview();
+
+  if (item.category === 'trail') {
+    previewBoostTimer = 3.0;
+  } else if (item.category === 'firework') {
+    if (turntableParticles) {
+      const colors = (item.params && item.params.palette)
+        ? item.params.palette.map((c) => new THREE.Color(c))
+        : [new THREE.Color(0xffd54a), new THREE.Color(0xff5e5b), new THREE.Color(0x70c0ff)];
+      turntableParticles.fireworkBurst(new THREE.Vector3(0, 0.5, 0), 45, 7.5, item.id, {
+        colors,
+        life: 1.1,
+        size: 1.8,
+      });
+      sound.balloonPop();
+    }
+  } else if (item.category === 'voice') {
+    const pIdx = Math.max(0, PILOTS.findIndex((p) => p.id === game.pilotId));
+    sound.pilotChatter(pIdx, 0.9, item.id);
+  }
+
+  renderHangarGrid();
+}
+
+function renderHangarTabs() {
+  if (!ui.hangarTabs) return;
+  for (const tab of ui.hangarTabs.querySelectorAll('.h-tab')) {
+    tab.classList.toggle('active', tab.dataset.cat === game.hangarTab);
+  }
+}
+
+function renderHangarGrid() {
+  if (!ui.hangarGrid) return;
+  ui.hangarGrid.innerHTML = '';
+
+  if (game.hangarTab === 'sponsors') {
+    for (const sp of ROUND_SPONSORS) {
+      const card = document.createElement('div');
+      card.className = 'shop-card';
+      const isActive = game.activeRoundSponsor && game.activeRoundSponsor.id === sp.id;
+      const anotherActive = Boolean(game.activeRoundSponsor && !isActive);
+      const canAfford = game.myCredits >= sp.cost;
+
+      if (isActive) card.classList.add('equipped-card');
+      if (game.previewingItemId === sp.id) card.classList.add('previewing');
+
+      let btnHtml = '';
+      if (isActive) {
+        btnHtml = `<button class="btn-action btn-equipped" disabled type="button">ACTIVE THIS ROUND ✓</button>`;
+      } else if (anotherActive) {
+        btnHtml = `<button class="btn-action btn-buy-disabled" disabled type="button">ANOTHER ACTIVE</button>`;
+      } else if (canAfford) {
+        btnHtml = `<button class="btn-action btn-sponsor" data-id="${sp.id}" type="button">SPONSOR ★ ${sp.cost}</button>`;
+      } else {
+        btnHtml = `<button class="btn-action btn-buy-disabled" disabled type="button">NEED ★ ${sp.cost - game.myCredits} MORE</button>`;
+      }
+
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="card-name">${escapeHtml(sp.name)}</span>
+          <span class="card-price">★ ${sp.cost} CR</span>
+        </div>
+        <div class="card-desc">${escapeHtml(sp.description)}</div>
+        <div class="card-action">${btnHtml}</div>
+      `;
+
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        previewItem(sp);
+      });
+
+      const btn = card.querySelector('.btn-sponsor');
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sponsorUpcomingRound(sp);
+        });
+      }
+
+      ui.hangarGrid.appendChild(card);
+    }
+    return;
+  }
+
+  const items = itemsByCategory(game.hangarTab);
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'shop-card';
+    const isEq = game.myEquipped[game.hangarTab] === item.id;
+    const isPrev = game.previewEquipped[game.hangarTab] === item.id;
+    const isUnlocked = isDefaultItem(item.id) || (game.myUnlocked && game.myUnlocked.includes(item.id));
+    const canAfford = game.myCredits >= item.price;
+
+    if (isEq) card.classList.add('equipped-card');
+    if (isPrev) card.classList.add('previewing');
+
+    let btnHtml = '';
+    if (isEq) {
+      btnHtml = `<button class="btn-action btn-equipped" disabled type="button">EQUIPPED ✓</button>`;
+    } else if (isUnlocked) {
+      btnHtml = `<button class="btn-action btn-equip" data-id="${item.id}" type="button">EQUIP</button>`;
+    } else if (canAfford) {
+      btnHtml = `<button class="btn-action btn-buy" data-id="${item.id}" type="button">BUY ★ ${item.price}</button>`;
+    } else {
+      btnHtml = `<button class="btn-action btn-buy-disabled" disabled type="button">NEED ★ ${item.price - game.myCredits} MORE</button>`;
+    }
+
+    const priceHtml = item.price === 0
+      ? `<span class="card-price free">FREE</span>`
+      : `<span class="card-price">★ ${item.price} CR</span>`;
+
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="card-name">${escapeHtml(item.name)}</span>
+        ${priceHtml}
+      </div>
+      <div class="card-desc">${escapeHtml(item.description)}</div>
+      <div class="card-action">${btnHtml}</div>
+    `;
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      previewItem(item);
+    });
+
+    const equipBtn = card.querySelector('.btn-equip');
+    if (equipBtn) {
+      equipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        equipShopItem(item);
+      });
+    }
+
+    const buyBtn = card.querySelector('.btn-buy');
+    if (buyBtn) {
+      buyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        buyShopItem(item);
+      });
+    }
+
+    ui.hangarGrid.appendChild(card);
+  }
+}
+
+function equipShopItem(item) {
+  if (!socket) return;
+  socket.emit('shop:equip', { itemId: item.id }, (res) => {
+    if (res && res.ok && res.wallet) {
+      sound.playShopEquip();
+      game.myEquipped = { ...res.wallet.equipped };
+      game.previewEquipped = { ...game.myEquipped };
+      updateWalletDisplay();
+      updateLoadoutChips();
+      renderHangarGrid();
+      updateHangarPreview();
+      showBanner(`EQUIPPED: ${item.name.toUpperCase()}`, 1.8);
+    }
+  });
+}
+
+function buyShopItem(item) {
+  if (!socket) return;
+  if (game.myCredits < item.price) return;
+  socket.emit('shop:buy', { itemId: item.id }, (res) => {
+    if (res && res.ok && res.wallet) {
+      sound.playShopBuy();
+      game.myCredits = res.wallet.credits;
+      game.myUnlocked = res.wallet.unlocked || [];
+      game.myEquipped = { ...res.wallet.equipped };
+      game.previewEquipped = { ...game.myEquipped };
+      updateWalletDisplay();
+      updateLoadoutChips();
+      renderHangarGrid();
+      updateHangarPreview();
+      checkAffordableNewItems();
+      showBanner(`UNLOCKED: ${item.name.toUpperCase()}!`, 2.5);
+    } else {
+      sound.blip(200, 0.4);
+    }
+  });
+}
+
+function sponsorUpcomingRound(sponsor) {
+  if (!socket) return;
+  if (game.myCredits < sponsor.cost) return;
+  socket.emit('shop:sponsor', { sponsorId: sponsor.id }, (res) => {
+    if (res && res.ok) {
+      sound.fanfare(0.8);
+      if (res.wallet) game.myCredits = res.wallet.credits;
+      game.activeRoundSponsor = res.sponsor;
+      updateWalletDisplay();
+      showLobbySponsorBanner(res.sponsor);
+      renderHangarGrid();
+      checkAffordableNewItems();
+      showBanner(`🎉 SPONSORED: ${sponsor.name.toUpperCase()}!`, 3.0);
+    } else {
+      sound.blip(200, 0.4);
+    }
+  });
+}
+
+function openHangar(initialTab = 'wing') {
+  game.hangarOpen = true;
+  game.hangarTab = initialTab || 'wing';
+  game.previewEquipped = { ...game.myEquipped };
+  game.previewingItemId = game.previewEquipped[game.hangarTab] || null;
+
+  if (ui.hangarModal) ui.hangarModal.classList.remove('hidden');
+
+  renderHangarTabs();
+  renderHangarGrid();
+  initHangarTurntable();
+  updateHangarPreview();
+  startTurntable();
+
+  const curItem = itemById(game.previewingItemId);
+  if (curItem) {
+    if (ui.previewItemName) ui.previewItemName.textContent = curItem.name;
+    if (ui.previewDesc) ui.previewDesc.textContent = curItem.description;
+  }
+}
+
+function closeHangar() {
+  game.hangarOpen = false;
+  if (ui.hangarModal) ui.hangarModal.classList.add('hidden');
+  stopTurntable();
+}
+
+let receiptCountUpRaf = null;
+
+function renderCreditReceipt(breakdown, newBalance) {
+  if (!ui.resultsReceipt) return;
+  if (receiptCountUpRaf) {
+    cancelAnimationFrame(receiptCountUpRaf);
+    receiptCountUpRaf = null;
+  }
+
+  ui.resultsReceipt.classList.remove('hidden');
+  ui.receiptBreakdown.innerHTML = '';
+
+  const rows = [
+    { label: 'Base Finish', val: breakdown.baseFinish },
+    { label: 'Score Bonus', val: breakdown.scoreBonus },
+    { label: 'Style & Stunts', val: breakdown.styleBonus },
+    { label: 'Mid-Round Event', val: breakdown.eventBonus },
+    { label: 'Personal Best', val: breakdown.pbBonus },
+    { label: 'Underdog Rally', val: breakdown.underdogBonus },
+  ];
+
+  for (const r of rows) {
+    if (r.val > 0) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'receipt-row';
+      rowEl.innerHTML = `<span class="lbl">${escapeHtml(r.label)}</span><span class="val">+${r.val} CR</span>`;
+      ui.receiptBreakdown.appendChild(rowEl);
+    }
+  }
+
+  if (breakdown.sponsorMultiplier && breakdown.sponsorMultiplier > 1) {
+    const multEl = document.createElement('div');
+    multEl.className = 'receipt-row multiplier-row';
+    multEl.innerHTML = `<span class="lbl">Golden Skies Multiplier</span><span class="val">${breakdown.sponsorMultiplier}x</span>`;
+    ui.receiptBreakdown.appendChild(multEl);
+  }
+
+  const total = breakdown.totalEarned || 0;
+  if (ui.receiptTotalPayout) {
+    ui.receiptTotalPayout.textContent = `+${total} CR`;
+  }
+
+  const finalBal = (newBalance !== undefined) ? newBalance : ((breakdown.newBalance !== undefined) ? breakdown.newBalance : game.myCredits);
+  const startBal = Math.max(0, finalBal - total);
+
+  const startTime = performance.now();
+  const duration = 1200;
+  let lastSoundVal = startBal;
+
+  function countUp(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const curVal = Math.round(startBal + (finalBal - startBal) * ease);
+
+    if (curVal !== lastSoundVal) {
+      sound.playCreditTick();
+      lastSoundVal = curVal;
+    }
+
+    if (ui.receiptBalanceVal) ui.receiptBalanceVal.textContent = String(curVal);
+    if (ui.lobbyCreditsVal) ui.lobbyCreditsVal.textContent = String(curVal);
+
+    if (progress < 1) {
+      receiptCountUpRaf = requestAnimationFrame(countUp);
+    } else {
+      receiptCountUpRaf = null;
+      game.myCredits = finalBal;
+      updateWalletDisplay();
+      checkAffordableNewItems();
+    }
+  }
+
+  receiptCountUpRaf = requestAnimationFrame(countUp);
+}
+
+function wireHangar() {
+  if (ui.btnOpenHangar) {
+    ui.btnOpenHangar.addEventListener('click', () => openHangar());
+  }
+  if (ui.btnCloseHangar) {
+    ui.btnCloseHangar.addEventListener('click', () => closeHangar());
+  }
+  if (ui.btnQuickSponsor) {
+    ui.btnQuickSponsor.addEventListener('click', () => openHangar('sponsors'));
+  }
+  if (ui.hangarTabs) {
+    for (const tab of ui.hangarTabs.querySelectorAll('.h-tab')) {
+      tab.addEventListener('click', () => {
+        game.hangarTab = tab.dataset.cat;
+        renderHangarTabs();
+        renderHangarGrid();
+      });
+    }
+  }
+  if (ui.hangarModal) {
+    ui.hangarModal.addEventListener('click', (e) => {
+      if (e.target === ui.hangarModal) closeHangar();
+    });
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && game.hangarOpen) {
+      e.preventDefault();
+      closeHangar();
+    }
+  });
+  window.addEventListener('resize', () => {
+    if (game.hangarOpen) resizeTurntable();
   });
 }
 
@@ -588,6 +1245,8 @@ function enterLobby() {
   ui.touch.classList.add('hidden');
   ui.results.classList.add('hidden');
   ui.lobby.classList.remove('hidden');
+  updateWalletDisplay();
+  checkAffordableNewItems();
   ui.rotateHint.classList.add('hidden');
   gfx.targetFov = 60;
   clearRoundEntities();
@@ -702,6 +1361,9 @@ function updateRaceGateHighlight() {
 
 function startRound(data) {
   sound.resume();
+  if (game.hangarOpen) closeHangar();
+  const sponsor = data.roundSponsor || data.activeRoundSponsor || null;
+  game.activeRoundSponsor = sponsor;
   game.phase = 'playing';
   game.mode = data.mode;
   game.preset = data.preset;
@@ -808,8 +1470,13 @@ function startRound(data) {
   ui.btnFire.classList.toggle('hidden', data.mode === 'race');   // no fireworks on the race course
   controls.setEnabled(true);
   checkOrientation();
-  showBanner(data.mode === 'teams' ? 'RED VS BLUE!'
-    : data.mode === 'crown' ? 'CHASE THE CROWN!' : data.mode === 'race' ? 'RACE THE COURSE!' : 'POP & DIVE!');
+  if (sponsor) {
+    showBanner(`⚡ ROUND SPONSORED BY ${sponsor.sponsoredBy.toUpperCase()}: ${sponsor.name.toUpperCase()}!`, 4.5);
+    addFeed(`🎉 ${sponsor.name}: ${sponsor.description} (sponsored by ${sponsor.sponsoredBy})`);
+  } else {
+    showBanner(data.mode === 'teams' ? 'RED VS BLUE!'
+      : data.mode === 'crown' ? 'CHASE THE CROWN!' : data.mode === 'race' ? 'RACE THE COURSE!' : 'POP & DIVE!');
+  }
   sound.fanfare(0.7);
   addFeed(data.mode === 'teams' ? `You are on the ${self && self.team === 'blue' ? 'BLUE' : 'RED'} team — hit enemy jets for +10, no friendly fire`
     : data.mode === 'crown' ? 'Grab the Golden Crown: +1 pt every second you hold it'
@@ -889,6 +1556,14 @@ function endRound(results) {
     ui.resultsBests.classList.add('hidden');
     ui.resultsBests.innerHTML = '';
   }
+
+  const myRow = results.results.find((r) => r.id === game.myId);
+  if (myRow && myRow.creditBreakdown) {
+    renderCreditReceipt(myRow.creditBreakdown, myRow.credits);
+  } else if (ui.resultsReceipt) {
+    ui.resultsReceipt.classList.add('hidden');
+  }
+
   if (results.leaderboard) { game.leaderboard = results.leaderboard; renderLeaderboard(); }
   sound.roundOver();
   sound.updateEngine(0, false);
@@ -1975,6 +2650,7 @@ async function boot() {
   buildPickers();
   wireLobby();
   wireEmotes();
+  wireHangar();
   const info = await loadHostInfo();
   loadLeaderboard();
   buildWorld(info ? info.seed : 1337);

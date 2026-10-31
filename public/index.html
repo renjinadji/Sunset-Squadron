@@ -52,9 +52,23 @@
     <div class="lobby-bg"></div>
     <div class="lobby-card glass">
       <header class="lobby-header">
-        <h1><span class="title-sun">SUNSET SQUADRON</span><span class="title-sub">CROWN CHASE</span></h1>
+        <div class="lobby-top-row">
+          <h1><span class="title-sun">SUNSET SQUADRON</span><span class="title-sub">CROWN CHASE</span></h1>
+          <div class="lobby-wallet-bar">
+            <div id="lobby-credits-pill" class="credits-pill">★ <span id="lobby-credits-val">0</span> CR</div>
+            <button id="btn-open-hangar" class="hangar-btn glass-btn" type="button">
+              <span class="btn-icon">🛠️</span>
+              <span class="btn-text">HANGAR SHOP</span>
+              <span id="hangar-new-badge" class="badge-new hidden">NEW</span>
+            </button>
+          </div>
+        </div>
         <p class="story">Renji, Resa and Kaya have raced their jets over the floating isles every summer.
           This year the Golden Crown is up for grabs — scan, pick a pilot, and chase the sunset.</p>
+        <div id="lobby-sponsor-banner" class="lobby-sponsor-banner hidden">
+          <span class="sponsor-star">⚡</span>
+          <span id="lobby-sponsor-text" class="sponsor-banner-text">ROUND SPONSORED</span>
+        </div>
       </header>
 
       <div class="lobby-grid">
@@ -102,6 +116,13 @@
           </div>
 
           <div id="roster-panel" class="hidden">
+            <div id="roster-sponsor-strip" class="sponsor-strip glass-soft">
+              <div class="sponsor-strip-info">
+                <span class="sponsor-strip-icon">🎉</span>
+                <span id="roster-sponsor-desc" class="sponsor-strip-desc">No party sponsor active for next match</span>
+              </div>
+              <button id="btn-quick-sponsor" class="sponsor-strip-btn" type="button">SPONSOR MATCH</button>
+            </div>
             <h2>Squadron <span id="roster-count"></span></h2>
             <ul id="roster"></ul>
             <div class="hint">Tap your own card to change pilot before the round starts.</div>
@@ -196,7 +217,82 @@
       <h1 id="results-title">ROUND OVER</h1>
       <ol id="results-list"></ol>
       <div id="results-bests" class="results-bests hidden"></div>
+      
+      <!-- Round-End Sky Credits Receipt -->
+      <div id="results-receipt" class="results-receipt glass-soft hidden">
+        <div class="receipt-header">
+          <div class="receipt-title-box">
+            <span class="receipt-star">★</span>
+            <span class="receipt-title">SKY CREDITS EARNED</span>
+          </div>
+          <span id="receipt-total-payout" class="receipt-total-payout">+0 CR</span>
+        </div>
+        <div class="receipt-breakdown" id="receipt-breakdown"></div>
+        <div class="receipt-footer">
+          <span class="receipt-wallet-lbl">NEW WALLET BALANCE:</span>
+          <span class="receipt-wallet-val">★ <span id="receipt-balance-val">0</span> CR</span>
+        </div>
+      </div>
+
       <div class="hint">Back to the lobby in a moment…</div>
+    </div>
+  </div>
+
+  <!-- ===================== HANGAR & SHOP MODAL ===================== -->
+  <div id="hangar-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Hangar and Shop">
+    <div class="hangar-card glass">
+      <div class="hangar-header">
+        <div class="hangar-title-group">
+          <h2>🛠️ HANGAR &amp; SHOP</h2>
+          <span class="hangar-subtitle">PROCEDURAL COSMETICS &amp; PARTY SPONSORS</span>
+        </div>
+        <div class="hangar-header-right">
+          <div class="credits-pill modal-credits">★ <span id="hangar-credits-val">0</span> CR</div>
+          <button id="btn-close-hangar" class="btn-close" type="button" aria-label="Close Hangar">✕</button>
+        </div>
+      </div>
+
+      <div class="hangar-body">
+        <!-- Left: Live Preview Column -->
+        <div class="hangar-preview-col glass-soft">
+          <div class="preview-header">
+            <span class="preview-badge">3D TURNTABLE</span>
+            <span id="preview-item-name" class="preview-item-name">Standard Delta</span>
+          </div>
+          <div class="preview-canvas-wrap">
+            <canvas id="hangar-turntable-canvas" width="460" height="320"></canvas>
+            <div class="preview-portrait-chip">
+              <canvas id="hangar-portrait-canvas" width="68" height="68"></canvas>
+              <div class="preview-pilot-labels">
+                <span id="hangar-pilot-callsign" class="preview-callsign">ECHO</span>
+                <span id="hangar-visor-style" class="preview-visor-style">Standard Visor</span>
+              </div>
+            </div>
+            <div class="preview-hint">Drag 3D jet to rotate · Tap items to preview</div>
+          </div>
+          <div class="preview-details">
+            <div id="preview-desc" class="preview-desc">Standard balanced delta airframe with swept wings.</div>
+            <div class="preview-equipped-chips" id="preview-equipped-chips"></div>
+          </div>
+        </div>
+
+        <!-- Right: Category Tabs & Grid -->
+        <div class="hangar-catalog-col">
+          <div class="hangar-tabs" id="hangar-tabs" role="tablist">
+            <button class="h-tab active" data-cat="wing" type="button">Wings</button>
+            <button class="h-tab" data-cat="finish" type="button">Paint</button>
+            <button class="h-tab" data-cat="trail" type="button">Trails</button>
+            <button class="h-tab" data-cat="firework" type="button">Fireworks</button>
+            <button class="h-tab" data-cat="voice" type="button">Voices</button>
+            <button class="h-tab" data-cat="visor" type="button">Visors</button>
+            <button class="h-tab sponsor-tab" data-cat="sponsors" type="button">🎉 Sponsors</button>
+          </div>
+
+          <div class="hangar-items-scroll">
+            <div id="hangar-grid" class="hangar-grid"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
