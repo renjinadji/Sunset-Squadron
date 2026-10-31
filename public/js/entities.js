@@ -3261,6 +3261,15 @@ export class DreadnoughtBoss {
     this.phase = 1;
     this.enraged = false;
     this.destroyed = false;
+    this.alive = true;
+  }
+
+  setPosition(x, y, z) {
+    this.group.position.set(x, y, z);
+  }
+
+  setRotation(yaw) {
+    this.group.rotation.y = yaw;
   }
 
   flashHit() {
@@ -3327,6 +3336,7 @@ export class DreadnoughtBoss {
   }
 
   destroy(particles) {
+    this.alive = false;
     this.destroyed = true;
     if (particles) {
       const p = this.group.position;

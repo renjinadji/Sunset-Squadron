@@ -1037,6 +1037,10 @@
     * `#boss-arrow`: off-screen camera frustum tracker with pulsing crimson chevron and BOSS label pointing to the Dreadnought when outside camera view.
     * Results screen displays "RAID VICTORY — DREADNOUGHT DESTROYED" or "TIME EXPIRED — MISSION FAILED" with boss damage breakdowns.
   - **Automated Tests:** Added `test/boss.test.js` covering mode setup, HP scaling, damage types, phase thresholds, scoring, and credit payouts. All 57 tests passing (100%).
+  - **Dreadnought Lifecycle Bugfix (`public/js/entities.js`):**
+    * Added missing `setPosition(x, y, z)` and `setRotation(yaw)` methods to `DreadnoughtBoss`.
+    * Added `this.alive = true` in constructor and `this.alive = false` in `destroy()`.
+    * Resolved client-side `TypeError: bossMesh.setPosition is not a function` and `bossMesh.setRotation is not a function` which prevented the lobby screen from hiding on round start in boss raid mode.
 
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
