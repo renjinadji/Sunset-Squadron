@@ -193,3 +193,51 @@ test('computeCreditPayout awards bossDefeated bonus (+50 CR)', () => {
 
   assert.strictEqual(defeatPayout.bossDefeatedBonus, 0, 'No bossDefeated bonus if boss survived');
 });
+
+test('boss fight friendly-fire rules: players and wingmen cannot attack each other', () => {
+  const mode = 'boss';
+
+  // Rocket friendly-fire check function mimicking server stepRockets
+  function canRocketHit(rocketOwner, victimId, isRolling = false) {
+    if (victimId === rocketOwner) return false;
+    if (mode === 'boss' && rocketOwner !== 'boss') return false; // No friendly fire
+    if (isRolling) return false; // Deflected by barrel roll
+    return true;
+  }
+
+  // Mine friendly-fire check function mimicking server stepMines
+  function canMineDetonate(mineOwner, victimId) {
+    if (victimId === mineOwner) return false;
+    if (mode === 'boss' && mineOwner !== 'boss') return false; // No friendly fire
+    return true;
+  }
+
+  // Homing target filtering mimicking server findHomingTarget
+  function canTargetPlayer(rocketOwner, victimId) {
+    if (victimId === rocketOwner) return false;
+    if (mode === 'boss' && rocketOwner !== 'boss') return false;
+    return true;
+  }
+
+  // Player rockets in boss raid
+  assert.strictEqual(canRocketHit('player1', 'player2'), false, 'Player rocket cannot hit another player');
+  assert.strictEqual(canRocketHit('player1', 'bot_wingman_1'), false, 'Player rocket cannot hit a wingman bot');
+  assert.strictEqual(canRocketHit('bot_wingman_1', 'player1'), false, 'Wingman bot rocket cannot hit a player');
+  assert.strictEqual(canRocketHit('bot_wingman_1', 'bot_wingman_2'), false, 'Wingman bot rocket cannot hit another wingman');
+
+  // Player targeting in boss raid
+  assert.strictEqual(canTargetPlayer('player1', 'player2'), false, 'Player rocket cannot home in on another player');
+  assert.strictEqual(canTargetPlayer('bot_wingman_1', 'player1'), false, 'Wingman bot rocket cannot home in on player');
+
+  // Player mines in boss raid
+  assert.strictEqual(canMineDetonate('player1', 'player2'), false, 'Player mine does not detonate on another player');
+  assert.strictEqual(canMineDetonate('player1', 'bot_wingman_1'), false, 'Player mine does not detonate on a wingman bot');
+  assert.strictEqual(canMineDetonate('bot_wingman_1', 'player1'), false, 'Wingman mine does not detonate on player');
+
+  // Boss weapons CAN hit players/wingmen
+  assert.strictEqual(canRocketHit('boss', 'player1'), true, 'Boss missile can hit player');
+  assert.strictEqual(canRocketHit('boss', 'bot_wingman_1'), true, 'Boss missile can hit wingman bot');
+  assert.strictEqual(canTargetPlayer('boss', 'player1'), true, 'Boss missile can target player');
+  assert.strictEqual(canMineDetonate('boss', 'player1'), true, 'Boss mine can detonate on player');
+  assert.strictEqual(canMineDetonate('boss', 'bot_wingman_1'), true, 'Boss mine can detonate on wingman bot');
+});

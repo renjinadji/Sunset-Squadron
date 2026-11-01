@@ -1061,7 +1061,15 @@
   - **Wingman Bot AI Enhancements (`server.js`):**
     * Bots maintain tactical break-away distance (>75m) to avoid collisions with the Dreadnought hull.
     * Bots detect incoming titan missiles within 55m and automatically execute barrel rolls to deflect them.
-  - **Automated Tests:** Updated `test/boss.test.js` with pilot/wingmen HP scaling and Sonic Frontiers attack specifications. 58 unit tests passing (100%).
+  - **Friendly-Fire Removal in Boss Raid (`server.js`, `public/js/main.js`, `test/boss.test.js`):**
+    * **Targeting Isolation:** In Boss Raid mode (`state.settings.mode === 'boss'`), rockets fired by players/wingmen (`r.owner !== 'boss'`) ignore all other pilots/wingmen and ally decoys in `findHomingTarget()`, cleanly focusing on the Sky Dreadnought.
+    * **Collision & Damage Immunity:** In `stepRockets()`, rockets fired by players/wingmen pass harmlessly through other players/wingmen without dealing damage, causing tumbles, or breaking shield bubbles.
+    * **Mine Safety:** In `stepMines()`, proximity mines deployed by players/wingmen do not detonate on or harm friendly pilots/wingmen, detonating exclusively against the boss (8 DMG) or blimp.
+    * **Decoy Protection:** Player rockets ignore ally decoys, allowing decoys to survive and draw boss seeker missiles away from friendly jets.
+    * **Bot Mine Avoidance:** Bot wingmen do not veer away from ally-deployed mines in boss raid mode.
+    * **Client HUD Threat Filter:** `updateMissileWarningSystem()` in `public/js/main.js` ignores rockets from allies/wingmen during Boss Raid mode, alerting pilots strictly to incoming Titan missiles.
+    * **Boss Attack Lethality Preserved:** Missiles (`r.owner === 'boss'`), tracer rounds, cyberspace bullet rings, and proximity mines deployed by the Sky Dreadnought continue to target and hit all players/wingmen unless deflected by barrel rolls.
+  - **Automated Tests:** Updated `test/boss.test.js` with friendly-fire immunity test suite. 59 unit tests passing (100%).
 
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.

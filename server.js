@@ -1614,11 +1614,13 @@ function findHomingTarget(r, t) {
   for (const p of state.players.values()) {
     if (p.id === r.owner) continue;
     if (p.team && r.team && p.team === r.team) continue;   // Red vs Blue: no friendly fire
+    if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no friendly fire against pilots/wingmen
     if (hasFx(p, 'ghost', t)) continue;   // Ghost: invisible to homing
     consider(p.pos, p.id, 'player');
   }
   for (const dec of state.decoys) {
     if (dec.owner === r.owner) continue;
+    if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: ally decoys are for the boss, not allies
     consider(dec.p, dec.id, 'decoy');
   }
   if (state.settings.mode === 'blitz') {
@@ -1627,7 +1629,7 @@ function findHomingTarget(r, t) {
   if (state.blimp && state.blimp.alive) {
     consider(state.blimp.pos, 'blimp', 'blimp');
   }
-  if (state.settings.mode === 'boss' && state.boss && state.boss.alive) {
+  if (state.settings.mode === 'boss' && state.boss && state.boss.alive && r.owner !== 'boss') {
     consider(state.boss.pos, 'boss', 'boss');
   }
   return best;
@@ -1658,6 +1660,7 @@ function stepRockets(dt, t) {
       else if (r.targetKind === 'boss') { if (state.boss && state.boss.alive) curD = dist(state.boss.pos, r.p); }
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
+        if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: player rockets don't retarget to ally decoys
         const dd = dist(dec.p, r.p);
         if (dd < curD) {
           const toD = vnorm(vsub(dec.p, r.p));
@@ -1700,6 +1703,7 @@ function stepRockets(dt, t) {
     for (const p of state.players.values()) {
       if (p.id === r.owner) continue;
       if (p.team && r.team && p.team === r.team) continue;   // Red vs Blue: no friendly fire
+      if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no friendly fire between pilots/wingmen
       const d = dist(p.pos, r.p);
       if (d < 16 && t < p.rollingUntil && !r.deflected) {
         // Barrel roll deflects the rocket away from the dodging jet
@@ -1747,6 +1751,7 @@ function stepRockets(dt, t) {
       for (const p of state.players.values()) {
         if (p.id === r.owner || p.gone || r.awarded[p.id]) continue;
         if (p.team && r.team && p.team === r.team) continue;   // no style credit off teammates' rockets
+        if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no close call off ally rockets
         if (dist(p.pos, r.p) < STYLE_CLOSE_CALL_R
           && t - p.lastCloseCallAt >= STYLE_CLOSE_CALL_THROTTLE_S) {
           r.awarded[p.id] = true;   // once per rocket
@@ -1759,6 +1764,7 @@ function stepRockets(dt, t) {
     if (!dead) {
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
+        if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: player rockets pass through ally decoys
         if (dist(dec.p, r.p) < 12) {
           dead = true;
           dec.expiresAt = 0; // expires immediately
@@ -1823,6 +1829,7 @@ function stepMines(dt, t) {
       if (!dead) for (const p of state.players.values()) {
         if (p.id === m.owner || p.gone) continue;
         if (p.team && m.team && p.team === m.team) continue;   // Red vs Blue: no friendly fire
+        if (state.settings.mode === 'boss' && m.owner !== 'boss') continue; // Boss Raid: no friendly fire on ally mines
         const d = dist(m.p, p.pos);
         if (d < 14 && t >= p.invulnUntil && !(t < p.rollingUntil)) {
           dead = true;
@@ -2939,6 +2946,7 @@ function stepBot(p, dt, t) {
   // Mine avoidance: steer away from any armed mine within ~60m
   for (const m of state.mines) {
     if (t < m.armAt) continue;
+    if (mode === 'boss' && m.owner !== 'boss') continue; // friendly mine, no need to swerve away
     const md = dist(m.p, p.pos);
     if (md < 60) {
       const away = vnorm(vsub(p.pos, m.p));

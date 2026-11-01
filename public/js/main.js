@@ -2698,6 +2698,8 @@ function updateMissileWarningSystem() {
     if (r.owner === game.myId) continue;
     // In Red vs Blue, ignore teammates
     if (game.mode === 'teams' && r.team && r.team === (game.myTeam === 'blue' ? 'b' : 'r')) continue;
+    // In Boss Raid, ignore ally/wingmen rockets (only boss missiles are threats)
+    if (game.mode === 'boss' && r.owner !== 'boss') continue;
 
     const rPos = r.mesh.group.position;
     const d = rPos.distanceTo(me.pos);
