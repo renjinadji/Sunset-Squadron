@@ -52,6 +52,8 @@ const ROCKET_SPEED = 130;
 const ROCKET_LIFE = 3.2;
 const ROCKET_COOLDOWN = 1.2;
 const ROCKET_COOLDOWN_SUPER = 0.6;
+const RADAR_MISSILE_COOLDOWN = 3.6;       // Separate cooldown for radar-guided missiles
+const RADAR_MISSILE_COOLDOWN_SUPER = 1.8;
 const HOMING_CONE = (28 * Math.PI) / 180;
 const HOMING_RANGE = 220;
 const HOMING_TURN = 2.4;
@@ -365,6 +367,7 @@ function makePlayer(id, name, pilot, isBot) {
     burstUntil: 0,
     superUntil: 0,
     lastFire: 0,
+    lastRadarFire: 0,
     lastSeen: now(),
     lastCloseCallAt: 0,           // style: last close-call award time
     lowSince: 0,                  // style: when the current below-15m run started
@@ -433,6 +436,7 @@ function spawnPlayer(p, index, total, baseAng = 0, spread = Math.PI * 2) {
   p.score = 0;
   p.rollingUntil = 0; p.tumbleUntil = 0; p.invulnUntil = 0; p.burstUntil = 0; p.superUntil = 0;
   p.lastFire = 0;
+  p.lastRadarFire = 0;
   p.lastCloseCallAt = 0;
   p.lowSince = 0;
   p.lastLowAward = 0;
@@ -1528,21 +1532,16 @@ io.on('connection', (socket) => {
 function tryFire(p, radarTargetId = null, radarTargetKind = null) {
   if (state.settings.mode === 'race') return false;   // fireworks are off during Checkpoint Race
   const t = now();
-  let cd = t < p.superUntil ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
-  if (hasFx(p, 'rapid', t)) cd = Math.min(cd, ROCKET_COOLDOWN_RAPID);
-  cd *= p.perk.reload;
-  if (t - p.lastFire < cd - 0.05) return false;
-  p.lastFire = t;
   let dir = forwardFromYP(p.yaw, p.pitch);
   const start = vadd(p.pos, vscale(dir, 5));
 
   let assignedTarget = null;
   let assignedKind = null;
   let isRadar = false;
+  let tpos = null;
 
   // Radar guided missile lock-on
   if (radarTargetId) {
-    let tpos = null;
     if (radarTargetKind === 'boss' || radarTargetId === 'boss') {
       if (state.boss && state.boss.alive) {
         tpos = state.boss.pos;
@@ -1570,10 +1569,25 @@ function tryFire(p, radarTargetId = null, radarTargetKind = null) {
       const maxRange = HOMING_RANGE * (p.perk && p.perk.homingRange ? p.perk.homingRange : 1) * 1.6;
       if (dist(start, tpos) <= maxRange) {
         isRadar = true;
-        // Launch radar missile directly toward your target!
-        dir = vnorm(vsub(tpos, start));
       }
     }
+  }
+
+  // Separate cooldowns for radar-guided missiles vs standard fireworks
+  if (isRadar) {
+    let radarCd = t < p.superUntil ? RADAR_MISSILE_COOLDOWN_SUPER : RADAR_MISSILE_COOLDOWN;
+    if (hasFx(p, 'rapid', t)) radarCd = Math.min(radarCd, RADAR_MISSILE_COOLDOWN * 0.5);
+    radarCd *= (p.perk && p.perk.reload ? p.perk.reload : 1);
+    if (t - (p.lastRadarFire || 0) < radarCd - 0.05) return false;
+    p.lastRadarFire = t;
+    // Launch radar missile directly toward your target!
+    dir = vnorm(vsub(tpos, start));
+  } else {
+    let cd = t < p.superUntil ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
+    if (hasFx(p, 'rapid', t)) cd = Math.min(cd, ROCKET_COOLDOWN_RAPID);
+    cd *= (p.perk && p.perk.reload ? p.perk.reload : 1);
+    if (t - p.lastFire < cd - 0.05) return false;
+    p.lastFire = t;
   }
 
   const rocket = {

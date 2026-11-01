@@ -294,6 +294,7 @@ html, body {
 .bar-fill { height: 100%; width: 100%; border-radius: 4px; transition: width 0.08s linear; }
 .bar-fill.stamina { background: linear-gradient(90deg, #4ff1ff, #7dffd0); box-shadow: 0 0 8px rgba(79, 241, 255, 0.7); }
 .bar-fill.cooldown { background: linear-gradient(90deg, #ff9a3c, #ffd54a); box-shadow: 0 0 8px rgba(255, 154, 60, 0.7); }
+.bar-fill.radar-fill { background: linear-gradient(90deg, #00f0ff, #ff00aa); box-shadow: 0 0 8px rgba(0, 240, 255, 0.75); }
 
 .hud-right {
   position: absolute;
@@ -749,6 +750,27 @@ html, body {
   font-size: 10px;
   color: #ffbb00;
   font-family: monospace;
+}
+.radar-reticle.reloading .radar-bracket {
+  border-color: #ff9a3c;
+  filter: drop-shadow(0 0 6px rgba(255, 154, 60, 0.85));
+}
+.radar-reticle.reloading .radar-crosshair {
+  background: #ff9a3c;
+  box-shadow: 0 0 8px #ff9a3c;
+}
+.radar-reticle.reloading .radar-tag {
+  border-color: rgba(255, 154, 60, 0.5);
+}
+.radar-reticle.reloading .radar-tag-mode {
+  color: #ff9a3c;
+}
+.radar-reticle.ready .radar-bracket {
+  border-color: #00f0ff;
+  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.95));
+}
+.radar-reticle.ready .radar-tag-mode {
+  color: #00f0ff;
 }
 
 /* ---------------- TOUCH CONTROLS ---------------- */

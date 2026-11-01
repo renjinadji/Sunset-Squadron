@@ -188,7 +188,8 @@
       <div class="hud-identity"><canvas id="hud-portrait" width="44" height="44"></canvas><div><div class="hud-name" id="hud-name">—</div><div class="hud-callsign" id="hud-callsign">—</div></div></div>
       <div class="hud-score"><span id="hud-score">0</span> pts</div>
       <div class="bar"><div class="bar-fill stamina" id="hud-stamina"></div></div>
-      <div class="bar"><div class="bar-fill cooldown" id="hud-cooldown"></div></div>
+      <div class="bar" title="Standard Firework Cooldown"><div class="bar-fill cooldown" id="hud-cooldown"></div></div>
+      <div class="bar radar-bar" title="Radar Missile Cooldown"><div class="bar-fill radar-fill" id="hud-radar-cooldown"></div></div>
       <div class="hud-speed"><span id="hud-speed">48</span> kn</div>
     </div>
     <div class="hud-right glass" id="hud-board"></div>
@@ -218,7 +219,7 @@
         <div class="radar-crosshair"></div>
       </div>
       <div class="radar-tag">
-        <span class="radar-tag-mode">🎯 RADAR LOCK</span>
+        <span class="radar-tag-mode" id="radar-tag-mode">🎯 RADAR LOCK</span>
         <span class="radar-tag-target" id="radar-tag-target">TARGET</span>
         <span class="radar-tag-dist" id="radar-tag-dist">--m</span>
       </div>

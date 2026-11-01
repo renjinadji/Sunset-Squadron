@@ -20,6 +20,8 @@ const ROCKET_SPEED = 130;
 const ROCKET_COOLDOWN = 1.2;
 const ROCKET_COOLDOWN_SUPER = 0.6;
 const ROCKET_COOLDOWN_RAPID = 0.4;
+const RADAR_MISSILE_COOLDOWN = 3.6;
+const RADAR_MISSILE_COOLDOWN_SUPER = 1.8;
 const TURBO_SPEED = 95;
 const BARREL_ROLL_TIME = 0.45;
 const STATE_SEND_MS = 50;
@@ -95,7 +97,8 @@ const ui = {
   hudFeed: $('hud-feed'), hudStunts: $('hud-stunts'), hudBanner: $('hud-banner'), crownArrow: $('crown-arrow'),
   threatVignette: $('threat-vignette'), missileArrow: $('missile-arrow'), missileArrowLabel: $('missile-arrow-label'),
   hudMissileWarning: $('hud-missile-warning'), warningTitle: $('warning-title'), warningDist: $('warning-dist'), warningHint: $('warning-hint'),
-  radarReticle: $('radar-reticle'), radarTagTarget: $('radar-tag-target'), radarTagDist: $('radar-tag-dist'),
+  hudRadarCooldown: $('hud-radar-cooldown'),
+  radarReticle: $('radar-reticle'), radarTagMode: $('radar-tag-mode'), radarTagTarget: $('radar-tag-target'), radarTagDist: $('radar-tag-dist'),
   resultsTitle: $('results-title'), resultsList: $('results-list'), resultsBests: $('results-bests'),
   resultsReceipt: $('results-receipt'), receiptTotalPayout: $('receipt-total-payout'), receiptBreakdown: $('receipt-breakdown'), receiptBalanceVal: $('receipt-balance-val'),
   joyBase: $('joy-base'), joyKnob: $('joy-knob'), btnBoost: $('btn-boost'), btnFire: $('btn-fire'),
@@ -164,6 +167,7 @@ const me = {
   superUntil: 0,
   invuln: false,
   lastFire: -10,
+  lastRadarFire: -10,
   score: 0,
   gi: 0,                   // race: index of the next gate to pass
   gp: 0,                   // race: gates passed so far
@@ -1535,7 +1539,7 @@ function startRound(data) {
   if (self) { me.pos.set(self.pos.x, self.pos.y, self.pos.z); me.yaw = self.yaw; }
   else { me.pos.set(0, 90, 260); me.yaw = 0; }
   me.pitch = 0; me.roll = 0; me.speed = SPEED_BASE; me.stamina = 1; me.rollingUntil = 0; me.tumble = 0;
-  me.superUntil = 0; me.invuln = false; me.lastFire = -10; me.score = 0; me.fx = {}; me.fxAt = nowS();
+  me.superUntil = 0; me.invuln = false; me.lastFire = -10; me.lastRadarFire = -10; me.score = 0; me.fx = {}; me.fxAt = nowS();
   me.gi = 0; me.gp = 0; me.fin = 0;
   quatFromYPR(me.quat, me.yaw, 0, 0);
   me.jet.group.position.copy(me.pos);
@@ -2557,15 +2561,27 @@ function stepLocalFlight(dt) {
   let cd = sup ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
   if (hasFx('rapid')) cd = Math.min(cd, ROCKET_COOLDOWN_RAPID);
   cd *= game.perk.reload;
-  if (controls.fire && game.mode !== 'race' && t - me.lastFire >= cd) {
-    me.lastFire = t;
-    if (activeRadarLock) {
+
+  let radarCd = sup ? RADAR_MISSILE_COOLDOWN_SUPER : RADAR_MISSILE_COOLDOWN;
+  if (hasFx('rapid')) radarCd = Math.min(radarCd, RADAR_MISSILE_COOLDOWN * 0.5);
+  radarCd *= game.perk.reload;
+
+  if (controls.fire && game.mode !== 'race') {
+    const radarReady = activeRadarLock && (t - me.lastRadarFire >= radarCd);
+    const standardReady = t - me.lastFire >= cd;
+
+    if (radarReady) {
+      me.lastRadarFire = t;
       if (socket) socket.emit('fire', { target: activeRadarLock.id, targetKind: activeRadarLock.kind });
-    } else {
+      sound.fireworkLaunch();
+      gfx.addShake(0.18);
+      addFeed(`🎯 Radar missile -> ${activeRadarLock.name}!`);
+    } else if (standardReady) {
+      me.lastFire = t;
       if (socket) socket.emit('fire');
+      sound.fireworkLaunch();
+      gfx.addShake(0.12);
     }
-    sound.fireworkLaunch();
-    gfx.addShake(0.12);
   }
   // Event pill countdown
   if (game.event && game.event.remain > 0) {
@@ -2604,6 +2620,9 @@ function stepLocalFlight(dt) {
   // HUD
   ui.hudStamina.style.width = `${Math.round(me.stamina * 100)}%`;
   ui.hudCooldown.style.width = `${Math.round(clamp((t - me.lastFire) / cd, 0, 1) * 100)}%`;
+  if (ui.hudRadarCooldown) {
+    ui.hudRadarCooldown.style.width = `${Math.round(clamp((t - me.lastRadarFire) / radarCd, 0, 1) * 100)}%`;
+  }
   ui.btnFire.classList.toggle('cooling', t - me.lastFire < cd);
   ui.hudSpeed.textContent = Math.round(me.speed).toString();
   ui.hudScore.textContent = String(me.score);
@@ -2922,19 +2941,20 @@ function handleScreenTargetTap(screenX, screenY) {
 
   // Fire radar guided missile straight at target!
   const sup = t < me.superUntil;
-  let cd = sup ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
-  if (hasFx('rapid')) cd = Math.min(cd, ROCKET_COOLDOWN_RAPID);
-  cd *= game.perk.reload;
+  let radarCd = sup ? RADAR_MISSILE_COOLDOWN_SUPER : RADAR_MISSILE_COOLDOWN;
+  if (hasFx('rapid')) radarCd = Math.min(radarCd, RADAR_MISSILE_COOLDOWN * 0.5);
+  radarCd *= game.perk.reload;
 
-  // Direct tap fires immediately if ready or close to ready
-  if (t - me.lastFire >= cd * 0.7) {
-    me.lastFire = t;
+  // Direct tap fires immediately if ready or close to ready (within 0.75x cooldown tolerance)
+  if (t - me.lastRadarFire >= radarCd * 0.75) {
+    me.lastRadarFire = t;
     if (socket) socket.emit('fire', { target: target.id, targetKind: target.kind });
     sound.fireworkLaunch();
     gfx.addShake(0.18);
     addFeed(`🎯 Radar missile -> ${target.name}!`);
   } else {
-    addFeed(`🎯 Locked on ${target.name}!`);
+    const rem = Math.max(0.1, radarCd - (t - me.lastRadarFire)).toFixed(1);
+    addFeed(`🎯 Locked on ${target.name} (Reloading: ${rem}s)`);
   }
 
   return true;
@@ -2989,8 +3009,28 @@ function updateRadarReticle() {
 
   ui.radarReticle.style.left = `${Math.round(px)}px`;
   ui.radarReticle.style.top = `${Math.round(py)}px`;
+
+  const sup = t < me.superUntil;
+  let radarCd = sup ? RADAR_MISSILE_COOLDOWN_SUPER : RADAR_MISSILE_COOLDOWN;
+  if (hasFx('rapid')) radarCd = Math.min(radarCd, RADAR_MISSILE_COOLDOWN * 0.5);
+  radarCd *= game.perk.reload;
+  const isReady = (t - me.lastRadarFire >= radarCd);
+
+  ui.radarReticle.classList.toggle('ready', isReady);
+  ui.radarReticle.classList.toggle('reloading', !isReady);
+
+  if (ui.radarTagMode) {
+    ui.radarTagMode.textContent = isReady ? '🎯 RADAR READY' : '⏳ RADAR RELOADING';
+  }
   if (ui.radarTagTarget) ui.radarTagTarget.textContent = activeRadarLock.name;
-  if (ui.radarTagDist) ui.radarTagDist.textContent = `${Math.round(worldDist)}m`;
+  if (ui.radarTagDist) {
+    if (isReady) {
+      ui.radarTagDist.textContent = `${Math.round(worldDist)}m`;
+    } else {
+      const rem = Math.max(0.1, radarCd - (t - me.lastRadarFire)).toFixed(1);
+      ui.radarTagDist.textContent = `${rem}s · ${Math.round(worldDist)}m`;
+    }
+  }
   ui.radarReticle.classList.remove('hidden');
 }
 

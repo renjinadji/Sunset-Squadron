@@ -1086,6 +1086,19 @@
     * Replicated `rd: 1` flag in 20Hz compact snapshot with electric cyan/magenta particle spark rings.
   - **Automated Tests:** Added `test/radar.test.js` covering direct vector calculation, enhanced agility, lock retention past 90 degrees, friendly-fire safeguards, and screen hit test math. 63 unit tests passing (100%).
 
+- **Separate Cooldown for Radar-Guided Missiles (`server.js`, `public/index.html`, `public/style.css`, `public/js/main.js`, `test/radar.test.js`):**
+  - **Independent Cooldown Timers (`server.js`):**
+    * Disentangled standard fireworks (`p.lastFire`) from radar-guided missiles (`p.lastRadarFire`) so both weapon systems operate on separate timers.
+    * Standard firework cooldown: `ROCKET_COOLDOWN = 1.2s` (`0.6s` super, `0.4s` rapid).
+    * Radar-guided missile cooldown: `RADAR_MISSILE_COOLDOWN = 3.6s` (`1.8s` super, halved by rapid powerup, scaled by pilot reload perks).
+    * Firing a radar missile does not block standard fireworks, and firing fireworks does not delay radar missiles.
+    * Continuous fire integration: Holding fire while holding a radar lock launches radar missiles when available and falls back to standard fireworks while the radar system is cycling.
+  - **Client HUD & Dynamic Reticle Telemetry (`public/index.html`, `public/style.css`, `public/js/main.js`):**
+    * Added dedicated Radar Missile Cooldown gauge (`.bar.radar-bar` with `.bar-fill.radar-fill` cyan/magenta gradient `#00f0ff` to `#ff00aa`) in `.hud-left`.
+    * Interactive reticle dynamically toggles between `.ready` (neon cyan brackets with `🎯 RADAR READY`) and `.reloading` (warm amber brackets with `⏳ RADAR RELOADING` and live countdown `${rem}s · ${dist}m`).
+    * Screen-space tap/click targeting (`handleScreenTargetTap`) tests against `radarCd` with a 0.75x tolerance window and gives pilot feedback when cooling (`🎯 Locked on <Target> (Reloading: 1.4s)`).
+  - **Automated Tests:** Updated `test/radar.test.js` with tests asserting timer independence, super and rapid powerup scaling, and reload perks. All 64 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
 - Optional future enhancements:

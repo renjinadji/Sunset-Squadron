@@ -124,3 +124,76 @@ test('screen coordinate hit test accurately detects targets within tap radius', 
   // 120px away (outside both)
   assert.strictEqual(isScreenHit(320, 300, 200, 300, true), false, 'Tap 120px away misses');
 });
+
+test('radar-guided missiles have an independent cooldown separate from standard fireworks', () => {
+  const ROCKET_COOLDOWN = 1.2;
+  const ROCKET_COOLDOWN_SUPER = 0.6;
+  const RADAR_MISSILE_COOLDOWN = 3.6;
+  const RADAR_MISSILE_COOLDOWN_SUPER = 1.8;
+
+  function simulateFire(player, t, isRadar) {
+    if (isRadar) {
+      let radarCd = t < player.superUntil ? RADAR_MISSILE_COOLDOWN_SUPER : RADAR_MISSILE_COOLDOWN;
+      if (player.hasRapid) radarCd = Math.min(radarCd, RADAR_MISSILE_COOLDOWN * 0.5);
+      radarCd *= player.perkReload;
+      if (t - player.lastRadarFire < radarCd - 0.05) return false;
+      player.lastRadarFire = t;
+      return { type: 'radar', firedAt: t };
+    } else {
+      let cd = t < player.superUntil ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
+      if (player.hasRapid) cd = Math.min(cd, 0.4);
+      cd *= player.perkReload;
+      if (t - player.lastFire < cd - 0.05) return false;
+      player.lastFire = t;
+      return { type: 'standard', firedAt: t };
+    }
+  }
+
+  const p = {
+    superUntil: 0,
+    hasRapid: false,
+    perkReload: 1.0,
+    lastFire: 0,
+    lastRadarFire: 0,
+  };
+
+  // 1. Initial state at t = 10s: both are ready
+  let t = 10.0;
+  const res1 = simulateFire(p, t, true);
+  assert.ok(res1 && res1.type === 'radar', 'First radar missile fires successfully');
+  assert.strictEqual(p.lastRadarFire, 10.0, 'lastRadarFire updated to t = 10.0');
+  assert.strictEqual(p.lastFire, 0, 'lastFire remains 0 (standard firework not touched)');
+
+  // 2. Immediately at t = 10.1s, standard firework can fire because its cooldown is independent!
+  t = 10.1;
+  const res2 = simulateFire(p, t, false);
+  assert.ok(res2 && res2.type === 'standard', 'Standard firework fires immediately while radar is on cooldown');
+  assert.strictEqual(p.lastFire, 10.1, 'lastFire updated to 10.1');
+
+  // 3. At t = 11.0s (1.0s after radar fire): radar missile cannot fire yet (3.6s cd)
+  t = 11.0;
+  const res3 = simulateFire(p, t, true);
+  assert.strictEqual(res3, false, 'Radar missile blocked by 3.6s cooldown');
+
+  // 4. At t = 11.35s (1.25s after standard fire): standard firework can fire again!
+  t = 11.35;
+  const res4 = simulateFire(p, t, false);
+  assert.ok(res4 && res4.type === 'standard', 'Second standard firework fires at 1.25s');
+  assert.strictEqual(p.lastFire, 11.35);
+
+  // 5. At t = 13.6s (3.6s after radar fire): radar missile is ready again!
+  t = 13.6;
+  const res5 = simulateFire(p, t, true);
+  assert.ok(res5 && res5.type === 'radar', 'Radar missile fires again after 3.6s cooldown completes');
+  assert.strictEqual(p.lastRadarFire, 13.6);
+
+  // 6. Test Super powerup and perks
+  p.superUntil = 20.0; // active super
+  p.perkReload = 0.9;  // 10% faster reload perk
+  // With super (1.8s) and perk (0.9x): radarCd = 1.8 * 0.9 = 1.62s
+  t = 14.5; // only 0.9s since last radar fire at 13.6
+  assert.strictEqual(simulateFire(p, t, true), false, 'Still cooling under super perk');
+  t = 15.25; // 1.65s since 13.6 -> ready!
+  const res6 = simulateFire(p, t, true);
+  assert.ok(res6 && res6.type === 'radar', 'Radar missile fires with super reload speed (1.62s)');
+});
