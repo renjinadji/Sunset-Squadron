@@ -483,6 +483,33 @@ export class SoundEngine {
     osc.stop(t + (critical ? 0.08 : 0.13));
   }
 
+  /**
+   * Snappy high-tech lock-on chirp when acquiring a target via tap/click.
+   */
+  radarLock(volume = 1) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.exponentialRampToValueAtTime(1760, t + 0.08);
+    this._env(g, t, 0.16 * volume, 0.005, 0.09);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.1);
+
+    const osc2 = this.ctx.createOscillator();
+    const g2 = this.ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(1320, t + 0.05);
+    osc2.frequency.setValueAtTime(2200, t + 0.11);
+    this._env(g2, t + 0.05, 0.2 * volume, 0.005, 0.12);
+    osc2.connect(g2).connect(this.master);
+    osc2.start(t + 0.05);
+    osc2.stop(t + 0.18);
+  }
+
   /** Triumphant chime when an incoming missile is deflected by a barrel roll. */
   deflectChime(volume = 1) {
     if (!this.ctx || this.muted) return;

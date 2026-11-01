@@ -95,6 +95,7 @@ const ui = {
   hudFeed: $('hud-feed'), hudStunts: $('hud-stunts'), hudBanner: $('hud-banner'), crownArrow: $('crown-arrow'),
   threatVignette: $('threat-vignette'), missileArrow: $('missile-arrow'), missileArrowLabel: $('missile-arrow-label'),
   hudMissileWarning: $('hud-missile-warning'), warningTitle: $('warning-title'), warningDist: $('warning-dist'), warningHint: $('warning-hint'),
+  radarReticle: $('radar-reticle'), radarTagTarget: $('radar-tag-target'), radarTagDist: $('radar-tag-dist'),
   resultsTitle: $('results-title'), resultsList: $('results-list'), resultsBests: $('results-bests'),
   resultsReceipt: $('results-receipt'), receiptTotalPayout: $('receipt-total-payout'), receiptBreakdown: $('receipt-breakdown'), receiptBalanceVal: $('receipt-balance-val'),
   joyBase: $('joy-base'), joyKnob: $('joy-knob'), btnBoost: $('btn-boost'), btnFire: $('btn-fire'),
@@ -107,6 +108,7 @@ const ui = {
 const gfx = new Graphics($('game-canvas'));
 const sound = new SoundEngine();
 const controls = new Controls(ui.touch, ui.joyBase, ui.joyKnob, ui.btnBoost, ui.btnFire);
+controls.onTargetTap = (screenX, screenY) => handleScreenTargetTap(screenX, screenY);
 wireEmotes();
 let world = null;
 let socket = null;
@@ -1428,6 +1430,8 @@ function clearRoundEntities() {
     ui.missileArrow.classList.add('hidden');
     ui.threatVignette.classList.add('hidden');
   }
+  activeRadarLock = null;
+  if (ui.radarReticle) ui.radarReticle.classList.add('hidden');
   sound.updateMissileWarning(false);
   me.fx = {};
   puHtml = '';
@@ -1653,6 +1657,8 @@ function endRound(results) {
     ui.missileArrow.classList.add('hidden');
     ui.threatVignette.classList.add('hidden');
   }
+  activeRadarLock = null;
+  if (ui.radarReticle) ui.radarReticle.classList.add('hidden');
   sound.updateMissileWarning(false);
   game.event = null;
   removeGoldBalloon();
@@ -1804,6 +1810,7 @@ function onSnapshot(snap) {
     r.owner = rk.o;
     r.tg = rk.tg || null;
     r.team = rk.tm || null;
+    r.radar = Boolean(rk.rd);
     r.pos.set(rk.p[0], rk.p[1], rk.p[2]);
     r.dir.set(rk.d[0], rk.d[1], rk.d[2]);
     r.lastAt = t;
@@ -2552,7 +2559,11 @@ function stepLocalFlight(dt) {
   cd *= game.perk.reload;
   if (controls.fire && game.mode !== 'race' && t - me.lastFire >= cd) {
     me.lastFire = t;
-    if (socket) socket.emit('fire');
+    if (activeRadarLock) {
+      if (socket) socket.emit('fire', { target: activeRadarLock.id, targetKind: activeRadarLock.kind });
+    } else {
+      if (socket) socket.emit('fire');
+    }
     sound.fireworkLaunch();
     gfx.addShake(0.12);
   }
@@ -2599,6 +2610,7 @@ function stepLocalFlight(dt) {
   updateCrownArrow();
   updateBossArrow();
   updateMissileWarningSystem();
+  updateRadarReticle();
   updatePowerupHud();
 }
 
@@ -2781,6 +2793,208 @@ function updateMissileWarningSystem() {
 }
 
 // ---------------------------------------------------------------------------
+// Radar Guided Missiles (Tap/Click Lock-On)
+// ---------------------------------------------------------------------------
+let activeRadarLock = null; // { id, kind, name, lockedAt }
+const tmpScreenV = new THREE.Vector3();
+const tmpCamFwd = new THREE.Vector3();
+const tmpToTarget = new THREE.Vector3();
+
+function findTargetAtScreenCoords(screenX, screenY) {
+  if (game.phase !== 'playing' || !gfx.camera) return null;
+
+  tmpCamFwd.set(0, 0, -1).applyQuaternion(gfx.camera.quaternion);
+  let bestTarget = null;
+  let bestDistPx = Infinity;
+  const maxHitRadiusPx = ('ontouchstart' in window) ? 75 : 55;
+
+  // 1. Check remote jets (players & AI wingmen bots)
+  for (const [id, r] of remote) {
+    if (id === game.myId) continue;
+    // In Red vs Blue, ignore teammates
+    if (game.mode === 'teams' && game.myTeam && r.info && r.info.team && r.info.team === game.myTeam) continue;
+    // In Boss raid, players and wingmen are allies
+    if (game.mode === 'boss') continue;
+
+    const targetPos = r.jet ? r.jet.group.position : r.pos;
+    tmpToTarget.copy(targetPos).sub(gfx.camera.position);
+    if (tmpCamFwd.dot(tmpToTarget) <= 2) continue; // Behind camera
+    const worldDist = tmpToTarget.length();
+    if (worldDist > 360) continue; // Out of radar range
+
+    tmpScreenV.copy(targetPos).project(gfx.camera);
+    if (tmpScreenV.z > 1) continue;
+
+    const px = ((tmpScreenV.x + 1) / 2) * window.innerWidth;
+    const py = ((-tmpScreenV.y + 1) / 2) * window.innerHeight;
+    const dPx = Math.hypot(screenX - px, screenY - py);
+
+    if (dPx < maxHitRadiusPx && dPx < bestDistPx) {
+      bestDistPx = dPx;
+      bestTarget = {
+        id,
+        kind: 'player',
+        name: nameOf(id),
+        pos: targetPos,
+        screenX: px,
+        screenY: py,
+        worldDist,
+      };
+    }
+  }
+
+  // 2. In Boss Raid: allow tapping the Sky Dreadnought
+  if (game.mode === 'boss' && bossMesh && bossMesh.alive) {
+    const bossPos = bossMesh.group.position;
+    tmpToTarget.copy(bossPos).sub(gfx.camera.position);
+    if (tmpCamFwd.dot(tmpToTarget) > 5) {
+      const worldDist = tmpToTarget.length();
+      if (worldDist < 520) {
+        tmpScreenV.copy(bossPos).project(gfx.camera);
+        if (tmpScreenV.z <= 1) {
+          const px = ((tmpScreenV.x + 1) / 2) * window.innerWidth;
+          const py = ((-tmpScreenV.y + 1) / 2) * window.innerHeight;
+          const dPx = Math.hypot(screenX - px, screenY - py);
+          if (dPx < 140 && dPx < bestDistPx) {
+            bestDistPx = dPx;
+            bestTarget = {
+              id: 'boss',
+              kind: 'boss',
+              name: 'Sky Dreadnought',
+              pos: bossPos,
+              screenX: px,
+              screenY: py,
+              worldDist,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Boss Blimp event
+  if (blimpMesh && game.event && game.event.type === 'blimp') {
+    const blimpPos = blimpMesh.group.position;
+    tmpToTarget.copy(blimpPos).sub(gfx.camera.position);
+    if (tmpCamFwd.dot(tmpToTarget) > 5) {
+      const worldDist = tmpToTarget.length();
+      if (worldDist < 420) {
+        tmpScreenV.copy(blimpPos).project(gfx.camera);
+        if (tmpScreenV.z <= 1) {
+          const px = ((tmpScreenV.x + 1) / 2) * window.innerWidth;
+          const py = ((-tmpScreenV.y + 1) / 2) * window.innerHeight;
+          const dPx = Math.hypot(screenX - px, screenY - py);
+          if (dPx < 110 && dPx < bestDistPx) {
+            bestDistPx = dPx;
+            bestTarget = {
+              id: 'blimp',
+              kind: 'blimp',
+              name: 'Boss Blimp',
+              pos: blimpPos,
+              screenX: px,
+              screenY: py,
+              worldDist,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return bestTarget;
+}
+
+function handleScreenTargetTap(screenX, screenY) {
+  if (game.phase !== 'playing' || game.mode === 'race') return false;
+  const target = findTargetAtScreenCoords(screenX, screenY);
+  if (!target) return false;
+
+  const t = nowS();
+  activeRadarLock = {
+    id: target.id,
+    kind: target.kind,
+    name: target.name,
+    lockedAt: t,
+  };
+
+  sound.radarLock();
+  updateRadarReticle();
+
+  // Fire radar guided missile straight at target!
+  const sup = t < me.superUntil;
+  let cd = sup ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
+  if (hasFx('rapid')) cd = Math.min(cd, ROCKET_COOLDOWN_RAPID);
+  cd *= game.perk.reload;
+
+  // Direct tap fires immediately if ready or close to ready
+  if (t - me.lastFire >= cd * 0.7) {
+    me.lastFire = t;
+    if (socket) socket.emit('fire', { target: target.id, targetKind: target.kind });
+    sound.fireworkLaunch();
+    gfx.addShake(0.18);
+    addFeed(`🎯 Radar missile -> ${target.name}!`);
+  } else {
+    addFeed(`🎯 Locked on ${target.name}!`);
+  }
+
+  return true;
+}
+
+function updateRadarReticle() {
+  if (!ui.radarReticle) return;
+  if (game.phase !== 'playing' || !activeRadarLock) {
+    ui.radarReticle.classList.add('hidden');
+    return;
+  }
+
+  const t = nowS();
+  if (t - activeRadarLock.lockedAt > 8.0) {
+    activeRadarLock = null;
+    ui.radarReticle.classList.add('hidden');
+    return;
+  }
+
+  let targetPos = null;
+  if (activeRadarLock.kind === 'boss') {
+    if (bossMesh && bossMesh.alive) targetPos = bossMesh.group.position;
+  } else if (activeRadarLock.kind === 'blimp') {
+    if (blimpMesh && game.event && game.event.type === 'blimp') targetPos = blimpMesh.group.position;
+  } else {
+    const r = remote.get(activeRadarLock.id);
+    if (r) targetPos = r.jet ? r.jet.group.position : r.pos;
+  }
+
+  if (!targetPos) {
+    activeRadarLock = null;
+    ui.radarReticle.classList.add('hidden');
+    return;
+  }
+
+  tmpCamFwd.set(0, 0, -1).applyQuaternion(gfx.camera.quaternion);
+  tmpToTarget.copy(targetPos).sub(gfx.camera.position);
+  const worldDist = tmpToTarget.length();
+  if (worldDist > 400 || tmpCamFwd.dot(tmpToTarget) <= 2) {
+    ui.radarReticle.classList.add('hidden');
+    return;
+  }
+
+  tmpScreenV.copy(targetPos).project(gfx.camera);
+  if (tmpScreenV.z > 1) {
+    ui.radarReticle.classList.add('hidden');
+    return;
+  }
+
+  const px = ((tmpScreenV.x + 1) / 2) * window.innerWidth;
+  const py = ((-tmpScreenV.y + 1) / 2) * window.innerHeight;
+
+  ui.radarReticle.style.left = `${Math.round(px)}px`;
+  ui.radarReticle.style.top = `${Math.round(py)}px`;
+  if (ui.radarTagTarget) ui.radarTagTarget.textContent = activeRadarLock.name;
+  if (ui.radarTagDist) ui.radarTagDist.textContent = `${Math.round(worldDist)}m`;
+  ui.radarReticle.classList.remove('hidden');
+}
+
+// ---------------------------------------------------------------------------
 // Remote interpolation
 // ---------------------------------------------------------------------------
 function stepRemote(dt) {
@@ -2801,6 +3015,17 @@ function stepRemote(dt) {
     tmpQ.setFromUnitVectors(FWD, r.dir);
     r.mesh.group.quaternion.slerp(tmpQ, 0.4);
     r.mesh.update(dt, gfx.particles);
+    if (r.radar && Math.random() < 0.45) {
+      gfx.particles.spawn({
+        pos: r.mesh.group.position,
+        vel: { x: (Math.random() - 0.5) * 3.5, y: (Math.random() - 0.5) * 3.5, z: (Math.random() - 0.5) * 3.5 },
+        life: 0.35,
+        size: 1.5,
+        drag: 0.85,
+        colors: [new THREE.Color(0x00f0ff), new THREE.Color(0xff00aa), new THREE.Color(0xffffff)],
+        glow: 2.2,
+      });
+    }
   }
   for (const b of balloons.values()) if (b.alive) b.mesh.update(dt, t);
   for (const m of meteors.values()) m.mesh.update(dt, gfx.particles);

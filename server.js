@@ -1491,10 +1491,12 @@ io.on('connection', (socket) => {
     player.lastSeen = now();
   });
 
-  socket.on('fire', () => {
+  socket.on('fire', (data) => {
     if (!player || state.phase !== 'playing') return;
     if (state.settings.mode === 'race') return;   // no fireworks on the race course
-    tryFire(player);
+    const targetId = data && typeof data.target === 'string' ? data.target : null;
+    const targetKind = data && typeof data.targetKind === 'string' ? data.targetKind : null;
+    tryFire(player, targetId, targetKind);
   });
 
   socket.on('barrelRoll', () => {
@@ -1523,7 +1525,7 @@ io.on('connection', (socket) => {
 // ---------------------------------------------------------------------------
 // Rockets, crown, balloons, gates
 // ---------------------------------------------------------------------------
-function tryFire(p) {
+function tryFire(p, radarTargetId = null, radarTargetKind = null) {
   if (state.settings.mode === 'race') return false;   // fireworks are off during Checkpoint Race
   const t = now();
   let cd = t < p.superUntil ? ROCKET_COOLDOWN_SUPER : ROCKET_COOLDOWN;
@@ -1531,10 +1533,71 @@ function tryFire(p) {
   cd *= p.perk.reload;
   if (t - p.lastFire < cd - 0.05) return false;
   p.lastFire = t;
-  const dir = forwardFromYP(p.yaw, p.pitch);
+  let dir = forwardFromYP(p.yaw, p.pitch);
   const start = vadd(p.pos, vscale(dir, 5));
-  state.rockets.push({ id: state.rocketSeq++, owner: p.id, team: p.team || null, p: start, d: dir, born: t, target: null, targetKind: null, awarded: {} });
-  io.emit('shot', { id: p.id, p: [r2(start.x), r2(start.y), r2(start.z)] });
+
+  let assignedTarget = null;
+  let assignedKind = null;
+  let isRadar = false;
+
+  // Radar guided missile lock-on
+  if (radarTargetId) {
+    let tpos = null;
+    if (radarTargetKind === 'boss' || radarTargetId === 'boss') {
+      if (state.boss && state.boss.alive) {
+        tpos = state.boss.pos;
+        assignedTarget = 'boss';
+        assignedKind = 'boss';
+      }
+    } else if (radarTargetKind === 'blimp' || radarTargetId === 'blimp') {
+      if (state.blimp && state.blimp.alive) {
+        tpos = state.blimp.pos;
+        assignedTarget = 'blimp';
+        assignedKind = 'blimp';
+      }
+    } else {
+      const tp = state.players.get(radarTargetId);
+      const isTeammate = p.team && tp && tp.team && p.team === tp.team;
+      const isBossAlly = state.settings.mode === 'boss' && p.id !== 'boss';
+      if (tp && !tp.gone && tp.id !== p.id && !isTeammate && !isBossAlly && !hasFx(tp, 'ghost', t)) {
+        tpos = tp.pos;
+        assignedTarget = tp.id;
+        assignedKind = 'player';
+      }
+    }
+
+    if (tpos) {
+      const maxRange = HOMING_RANGE * (p.perk && p.perk.homingRange ? p.perk.homingRange : 1) * 1.6;
+      if (dist(start, tpos) <= maxRange) {
+        isRadar = true;
+        // Launch radar missile directly toward your target!
+        dir = vnorm(vsub(tpos, start));
+      }
+    }
+  }
+
+  const rocket = {
+    id: state.rocketSeq++,
+    owner: p.id,
+    team: p.team || null,
+    p: start,
+    d: dir,
+    born: t,
+    target: assignedTarget,
+    targetKind: assignedKind,
+    radar: isRadar,
+    awarded: {},
+  };
+  state.rockets.push(rocket);
+
+  if (assignedKind === 'player' && assignedTarget) {
+    const victim = state.players.get(assignedTarget);
+    if (victim && !victim.isBot) {
+      io.to(victim.id).emit('missileLock', { id: rocket.id, shooter: p.id, radar: true });
+    }
+  }
+
+  io.emit('shot', { id: p.id, p: [r2(start.x), r2(start.y), r2(start.z)], radar: isRadar, tg: assignedTarget });
   return true;
 }
 
@@ -1685,12 +1748,14 @@ function stepRockets(dt, t) {
         const to = vnorm(vsub(tpos, r.p));
         const cosA = clamp(vdot(r.d, to), -1, 1);
         const ang = Math.acos(cosA);
-        if (ang > Math.PI / 2 + 0.3) { r.target = null; }
+        if (!r.radar && ang > Math.PI / 2 + 0.3) { r.target = null; }
         else if (ang > 0.0005) {
           const owner = state.players.get(r.owner);
-          const turnMult = (r.owner === 'boss' && state.boss && state.boss.phase === 2)
-            ? 1.4
-            : (owner && owner.perk && owner.perk.homingTurn ? owner.perk.homingTurn : 1);
+          const turnMult = r.radar
+            ? 2.6
+            : ((r.owner === 'boss' && state.boss && state.boss.phase === 2)
+              ? 1.4
+              : (owner && owner.perk && owner.perk.homingTurn ? owner.perk.homingTurn : 1));
           const step = Math.min(ang, HOMING_TURN * turnMult * dt);
           const perp = vnorm(vsub(to, vscale(r.d, cosA)));
           r.d = vnorm(vadd(vscale(r.d, Math.cos(step)), vscale(perp, Math.sin(step))));
@@ -3061,6 +3126,7 @@ function snapshot(t) {
       p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)],
       d: [r3(r.d.x), r3(r.d.y), r3(r.d.z)],
       ...(r.targetKind === 'player' && r.target ? { tg: r.target } : {}),
+      ...(r.radar ? { rd: 1 } : {}),
       ...(r.team ? { tm: r.team === 'blue' ? 'b' : 'r' } : {}),
     })),
     mines: state.mines.map((m) => ({ id: m.id, o: m.owner, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)], arm: t >= m.armAt ? 1 : 0 })),

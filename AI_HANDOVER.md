@@ -1071,6 +1071,21 @@
     * **Boss Attack Lethality Preserved:** Missiles (`r.owner === 'boss'`), tracer rounds, cyberspace bullet rings, and proximity mines deployed by the Sky Dreadnought continue to target and hit all players/wingmen unless deflected by barrel rolls.
   - **Automated Tests:** Updated `test/boss.test.js` with friendly-fire immunity test suite. 59 unit tests passing (100%).
 
+- **Radar Guided Missiles (Tap/Click Lock-On) (`server.js`, `public/js/controls.js`, `public/js/main.js`, `public/js/audio.js`, `public/index.html`, `public/style.css`, `test/radar.test.js`):**
+  - **Screen-Space Target Acquisition:**
+    * Implemented `findTargetAtScreenCoords(screenX, screenY)` projecting 3D positions of remote players, wingmen bots, and raid bosses to viewport screen coordinates with perspective camera depth testing.
+    * Generous screen touch target radius (75px on mobile/iPad touch, 55px on desktop mouse click) ensures effortless, responsive tap/click lock-on without sub-pixel misses.
+    * Prioritizes direct taps on on-screen physical button elements (`_isDirectButtonHit`) so tapping BOOST or FIRE buttons triggers actions reliably.
+  - **Direct Launch Trajectory & Relentless Tracking (`server.js`):**
+    * Upon tap/click, `tryFire(player, targetId, targetKind)` computes initial launch direction vector `dir = vnorm(vsub(targetPos, startPos))` directly toward the acquired target, so missiles streak straight for the target right from launch.
+    * Radar-guided missiles (`r.radar = true`) retain lock past 90 degrees (`!r.radar && ang > Math.PI / 2 + 0.3`) and feature agile tracking (`turnMult = 2.6`, ~6.2 rad/s turn rate).
+    * Deflection balance: target pilots receive an incoming missile warning on their HUD and can execute timed barrel rolls to deflect radar missiles.
+  - **HUD Radar Lock Reticle & Audio Synthesis (`public/index.html`, `public/style.css`, `public/js/audio.js`, `public/js/main.js`):**
+    * High-tech neon cyan bracket reticle (`.radar-reticle`) with pulsing magenta crosshair, target callsign, and live distance tracking in meters (`[ 🎯 RADAR LOCK · ACE · 124m ]`).
+    * Added `radarLock(volume)` FM lock chirp synthesizing dual-stage rising frequency affirmative audio tones on target acquisition.
+    * Replicated `rd: 1` flag in 20Hz compact snapshot with electric cyan/magenta particle spark rings.
+  - **Automated Tests:** Added `test/radar.test.js` covering direct vector calculation, enhanced agility, lock retention past 90 degrees, friendly-fire safeguards, and screen hit test math. 63 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
 - Optional future enhancements:

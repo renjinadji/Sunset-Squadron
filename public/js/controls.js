@@ -23,6 +23,7 @@ export class Controls {
 
     // One-shot events, consumed via takeRollTap()
     this._rollTaps = 0;
+    this.onTargetTap = null; // optional (screenX, screenY) => boolean (radar guided missile tap)
 
     // Touch bookkeeping
     this.joyTouchId = null;
@@ -90,6 +91,17 @@ export class Controls {
   }
 
   // ---------------- touch ----------------
+  _isDirectButtonHit(x, y) {
+    for (const el of [this.fireBtn, this.boostBtn]) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const rad = Math.max(r.width, r.height) / 2 + 14;
+      if (Math.hypot(x - cx, y - cy) <= rad) return true;
+    }
+    return false;
+  }
+
   _hitButton(x, y) {
     for (const [el, kind] of [[this.fireBtn, 'fire'], [this.boostBtn, 'boost']]) {
       const r = el.getBoundingClientRect();
@@ -105,6 +117,15 @@ export class Controls {
     if (!this.enabled) return;
     e.preventDefault();
     for (const t of Array.from(e.changedTouches)) {
+      if (this._isDirectButtonHit(t.clientX, t.clientY)) {
+        const kind = this._hitButton(t.clientX, t.clientY);
+        this.buttonTouches.set(t.identifier, { kind, startedAt: performance.now() });
+        this._refreshButtons();
+        continue;
+      }
+      if (this.onTargetTap && this.onTargetTap(t.clientX, t.clientY)) {
+        continue;
+      }
       if (t.clientX < window.innerWidth * 0.5) {
         if (this.joyTouchId === null) {
           this.joyTouchId = t.identifier;
@@ -176,6 +197,15 @@ export class Controls {
   _onMouseDown(e) {
     if (!this.enabled || e.button !== 0) return;
     e.preventDefault();
+    if (this._isDirectButtonHit(e.clientX, e.clientY)) {
+      const kind = this._hitButton(e.clientX, e.clientY);
+      this.buttonTouches.set('mouse', { kind, startedAt: performance.now() });
+      this._refreshButtons();
+      return;
+    }
+    if (this.onTargetTap && this.onTargetTap(e.clientX, e.clientY)) {
+      return;
+    }
     if (e.clientX < window.innerWidth * 0.5) {
       this.mouseDown = true;
       this.joyOrigin = { x: e.clientX, y: e.clientY };
