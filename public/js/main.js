@@ -9,6 +9,7 @@ import { SoundEngine } from './audio.js';
 import { PILOTS, PERKS, POWERUPS, pilotById, perkMultipliers, hexCss } from './pilots-data.js';
 import { portraitCanvas, portraitElement, drawPortrait } from './portraits.js';
 import { SHOP_CATEGORIES, DEFAULT_EQUIPPED, SHOP_ITEMS, ROUND_SPONSORS, itemById, itemsByCategory, sponsorById, isDefaultItem } from './shop-data.js';
+import { MAPS, MAP_METADATA, mapById } from './maps-data.js';
 
 // ---------------------------------------------------------------------------
 // Constants shared with the server flight model
@@ -80,7 +81,7 @@ const ui = {
   pdPortrait: $('pd-portrait'), pdCallsign: $('pd-callsign'), pdName: $('pd-name'), pdBio: $('pd-bio'), pdPerk: $('pd-perk'), pdPerkDesc: $('pd-perk-desc'), pdSwatches: $('pd-swatches'),
   lbTabs: $('lb-tabs'), lbBody: $('lb-body'), lbHint: $('lb-hint'),
   btnLaunch: $('btn-launch'), btnStart: $('btn-start'), joinError: $('join-error'), hostWait: $('host-wait'),
-  modeToggle: $('mode-toggle'), presetToggle: $('preset-toggle'), botsToggle: $('bots-toggle'),
+  mapToggle: $('map-toggle'), modeToggle: $('mode-toggle'), presetToggle: $('preset-toggle'), botsToggle: $('bots-toggle'),
   lobbyCreditsVal: $('lobby-credits-val'), btnOpenHangar: $('btn-open-hangar'), hangarNewBadge: $('hangar-new-badge'),
   lobbySponsorBanner: $('lobby-sponsor-banner'), lobbySponsorText: $('lobby-sponsor-text'),
   rosterSponsorStrip: $('roster-sponsor-strip'), rosterSponsorDesc: $('roster-sponsor-desc'), btnQuickSponsor: $('btn-quick-sponsor'),
@@ -129,6 +130,7 @@ const game = {
   rosterEditing: false,
   mode: 'crown',
   preset: 'sunset',
+  map: 'archipelago',
   myCredits: 0,
   myUnlocked: [],
   myEquipped: { ...DEFAULT_EQUIPPED },
@@ -362,6 +364,7 @@ async function loadHostInfo() {
     const res = await fetch('/api/host-info');
     let info = await res.json();
     game.seed = info.seed;
+    if (info.map) game.map = info.map;
     const serverHost = new URL(info.url).hostname;
     const pageHost = window.location.hostname;
     // If the page was loaded from a public host but the server only knows a private LAN IP,
@@ -536,6 +539,7 @@ function renderRoster(lobby) {
   if (lobby.phase !== 'lobby') { game.rosterEditing = false; ui.rosterPicker.classList.add('hidden'); }
   const humans = lobby.players.filter((p) => !p.isBot).length;
   ui.rosterCount.textContent = `${humans}/8 pilots · ${lobby.settings.bots} AI wingmen`;
+  for (const b of ui.mapToggle.children) b.classList.toggle('active', b.dataset.map === (lobby.settings.map || 'archipelago'));
   for (const b of ui.modeToggle.children) b.classList.toggle('active', b.dataset.mode === lobby.settings.mode);
   for (const b of ui.presetToggle.children) b.classList.toggle('active', b.dataset.preset === lobby.settings.preset);
   for (const b of ui.botsToggle.children) b.classList.toggle('active', Number(b.dataset.bots) === lobby.settings.bots);
@@ -548,6 +552,13 @@ function renderRoster(lobby) {
   ui.hostWait.textContent = lobby.phase === 'playing'
     ? `A round is in progress — ${hostName} will start the next one; you can drop in now.`
     : `⏳ Waiting for HOST ${hostName} to start the round…`;
+  const lobbyMap = lobby.settings.map || 'archipelago';
+  if (lobbyMap !== game.map) {
+    game.map = lobbyMap;
+    if (game.phase === 'lobby' && world) {
+      buildWorld(game.seed || (lobby.seed || 1337), game.map);
+    }
+  }
   if (lobby.settings.preset !== game.preset) {
     game.preset = lobby.settings.preset;
     gfx.applyPreset(game.preset);
@@ -561,6 +572,7 @@ function wireLobby() {
   ui.btnLaunch.addEventListener('touchend', (e) => { e.preventDefault(); launch(); }, { passive: false });
   ui.btnStart.addEventListener('click', () => { sound.resume(); if (socket) socket.emit('startRound'); });
   const setting = (key, value) => { if (socket) socket.emit('setSettings', { [key]: value }); };
+  for (const b of ui.mapToggle.children) b.addEventListener('click', () => setting('map', b.dataset.map));
   for (const b of ui.modeToggle.children) b.addEventListener('click', () => setting('mode', b.dataset.mode));
   for (const b of ui.presetToggle.children) b.addEventListener('click', () => setting('preset', b.dataset.preset));
   for (const b of ui.botsToggle.children) b.addEventListener('click', () => setting('bots', Number(b.dataset.bots)));
@@ -596,6 +608,12 @@ function connectSocket() {
     if (lobby.phase === 'lobby' && game.phase !== 'lobby') enterLobby();
   });
   socket.on('preset', ({ preset }) => { game.preset = preset; gfx.applyPreset(preset); });
+  socket.on('map', ({ map }) => {
+    game.map = map;
+    if (game.phase === 'lobby' && world) {
+      buildWorld(game.seed, map);
+    }
+  });
   socket.on('hostChange', ({ hostId }) => {
     // Host migration: re-render the roster so START ROUND / settings move to the new host
     if (game.lobby) { game.lobby.hostId = hostId; renderRoster(game.lobby); }
@@ -1454,12 +1472,13 @@ function spawnPickupMesh(k) {
   return entry;
 }
 
-function buildWorld(seed) {
-  if (world && world.seed === seed) return;
+function buildWorld(seed, map = 'archipelago') {
+  if (world && world.seed === seed && world.map === map) return;
   if (world) world.dispose();
-  world = new World(gfx.scene, seed);
+  world = new World(gfx.scene, seed, map);
   gfx.attachWorld(world);
   game.seed = seed;
+  game.map = map;
 }
 
 // ---------------------------------------------------------------------------
@@ -1509,16 +1528,19 @@ function startRound(data) {
   game.phase = 'playing';
   game.mode = data.mode;
   game.preset = data.preset;
+  game.map = data.map || 'archipelago';
   game.endsAt = data.endsAt;
   game.serverOffset = data.serverNow - Date.now();
   game.timeRemaining = Math.max(0, (data.endsAt - data.serverNow) / 1000);
   clearRoundEntities();
-  buildWorld(data.seed);
+  buildWorld(data.seed, game.map);
   gfx.applyPreset(data.preset);
 
   game.weather = data.weather || { type: 'clear', speed: 0, wind: { x: 0, y: 0, z: 0 }, label: '☀️ CLEAR' };
   game.windVec.set(game.weather.wind.x || 0, 0, game.weather.wind.z || 0);
   if (ui.hudWeather) ui.hudWeather.textContent = game.weather.label;
+  const meta = mapById(game.map);
+  if (meta) addFeed(`Map: ${meta.name}`);
 
   for (const p of data.players) {
     const prev = game.names.get(p.id) || {};
@@ -3238,7 +3260,7 @@ async function boot() {
   wireHangar();
   const info = await loadHostInfo();
   loadLeaderboard();
-  buildWorld(info ? info.seed : 1337);
+  buildWorld(info ? info.seed : 1337, game.map);
   gfx.applyPreset('sunset');
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
   window.addEventListener('pointerdown', () => sound.resume(), { passive: true });

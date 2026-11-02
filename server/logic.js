@@ -58,13 +58,16 @@ function r3(n) { return Math.round(n * 1000) / 1000; }
 /** Returns an outward push normal if pos is inside an island ellipsoid, else null. */
 function islandCollision(pos, islands) {
   for (const isl of islands) {
-    const dx = (pos.x - isl.cx) / isl.rx;
-    const dy = (pos.y - isl.cy) / isl.ry;
-    const dz = (pos.z - isl.cz) / isl.rx;
+    const rx = isl.rx || isl.r || 50;
+    const ry = isl.ry || isl.r || 50;
+    const rz = isl.rz || rx;
+    const dx = (pos.x - isl.cx) / rx;
+    const dy = (pos.y - isl.cy) / ry;
+    const dz = (pos.z - isl.cz) / rz;
     const q = dx * dx + dy * dy + dz * dz;
     if (q < 1) {
-      const n = vnorm({ x: dx / isl.rx, y: dy / isl.ry, z: dz / isl.rx });
-      const push = (1 - Math.sqrt(q)) * Math.min(isl.rx, isl.ry) + 2;
+      const n = vnorm({ x: dx / rx, y: dy / ry, z: dz / rz });
+      const push = (1 - Math.sqrt(q)) * Math.min(rx, ry, rz) + 2;
       return { n, push, island: isl };
     }
   }
@@ -314,11 +317,321 @@ function computeCreditPayout(options) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared deterministic world layout generators
+// (Identical to public/js/world.js)
+// ---------------------------------------------------------------------------
+
+function randomBalloonPos(rand, islands) {
+  for (let tries = 0; tries < 20; tries++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 60 + rand() * 560;
+    const x = Math.cos(ang) * dist;
+    const z = Math.sin(ang) * dist;
+    const y = 30 + rand() * 110;
+    let ok = true;
+    for (const isl of islands) {
+      const rx = isl.rx || isl.r || 50;
+      const ry = isl.ry || isl.r || 50;
+      const rz = isl.rz || rx;
+      const dx = (x - isl.cx) / rx;
+      const dz = (z - isl.cz) / rz;
+      if (dx * dx + dz * dz < 1.3 && y < isl.cy + ry + 20 && y > isl.cy - ry - 10) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return { x, y, z };
+  }
+  return { x: 0, y: 160, z: 0 };
+}
+
+function generateArchipelagoLayout(rand, seed) {
+  const islands = [];
+  // Central caldera island: collision ellipsoid centred at sea level.
+  islands.push({ kind: 'central', x: 0, y: 0, z: 0, r: 110, cx: 0, cy: 2, cz: 0, rx: 108, ry: 46, rz: 108 });
+  const outer = 6;
+  for (let i = 0; i < outer; i++) {
+    const ang = (i / outer) * Math.PI * 2 + (rand() - 0.5) * 0.5;
+    const dist = 300 + rand() * 140;
+    const r = 42 + rand() * 34;
+    const y = 40 + rand() * 70;
+    islands.push({
+      kind: 'floating',
+      x: Math.cos(ang) * dist,
+      y,
+      z: Math.sin(ang) * dist,
+      r,
+      cx: Math.cos(ang) * dist,
+      cy: y - r * 0.3,
+      cz: Math.sin(ang) * dist,
+      rx: r * 1.02,
+      ry: r * 0.75,
+      rz: r * 1.02,
+    });
+  }
+  const arches = [];
+  for (let i = 0; i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2 + (rand() - 0.5) * 0.3;
+    const dist = 170 + rand() * 330;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    for (const isl of islands) {
+      const dx = x - isl.x;
+      const dz = z - isl.z;
+      const d = Math.hypot(dx, dz);
+      if (d < isl.rx + 34) {
+        const k = (isl.rx + 34) / Math.max(d, 1);
+        x = isl.x + dx * k;
+        z = isl.z + dz * k;
+      }
+    }
+    const y = 35 + rand() * 90;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2, style: 'classic' });
+  }
+  const balloons = [];
+  for (let i = 0; i < 40; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+  const clouds = [];
+  for (let i = 0; i < 36; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 100 + rand() * 900;
+    clouds.push({ x: Math.cos(ang) * dist, y: 150 + rand() * 120, z: Math.sin(ang) * dist, s: 10 + rand() * 18, puffs: 3 + Math.floor(rand() * 4) });
+  }
+  return { seed, map: 'archipelago', islands, arches, balloons, clouds };
+}
+
+function generateCanyonLayout(rand, seed) {
+  const islands = [];
+  // 4 massive elongated canyon walls forming intersecting cross trenches
+  const wallAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+  for (let i = 0; i < 4; i++) {
+    const ang = wallAngles[i] + (rand() - 0.5) * 0.15;
+    const d = 190 + rand() * 30;
+    const wx = Math.cos(ang) * d;
+    const wz = Math.sin(ang) * d;
+    const yaw = ang + Math.PI / 2;
+    islands.push({
+      kind: 'canyon_wall',
+      x: wx, y: 22, z: wz,
+      yaw,
+      length: 220, width: 65, height: 70,
+      cx: wx, cy: 22, cz: wz,
+      rx: 110, ry: 48, rz: 35,
+    });
+  }
+
+  // 4 freestanding plateau mesas in the corners
+  const cornerAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+  for (let i = 0; i < 4; i++) {
+    const ang = cornerAngles[i] + (rand() - 0.5) * 0.2;
+    const d = 330 + rand() * 60;
+    const mx = Math.cos(ang) * d;
+    const mz = Math.sin(ang) * d;
+    const r = 48 + rand() * 18;
+    islands.push({
+      kind: 'mesa',
+      x: mx, y: 32, z: mz,
+      r,
+      cx: mx, cy: 25, cz: mz,
+      rx: r, ry: 50, rz: r,
+    });
+  }
+
+  // 3 high-altitude floating sandstone island plateaus
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI * 2 + rand() * 0.5;
+    const d = 260 + rand() * 80;
+    const r = 36 + rand() * 16;
+    const y = 85 + rand() * 35;
+    islands.push({
+      kind: 'floating',
+      x: Math.cos(ang) * d, y, z: Math.sin(ang) * d,
+      r,
+      cx: Math.cos(ang) * d, cy: y - r * 0.3, cz: Math.sin(ang) * d,
+      rx: r * 1.05, ry: r * 0.75, rz: r * 1.05,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.25;
+    const dist = 140 + rand() * 320;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 28 + rand() * 75;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 15, gateR: 11, hue: i % 2, style: 'sandstone' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 42; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 28; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 120 + rand() * 850;
+    clouds.push({ x: Math.cos(ang) * dist, y: 140 + rand() * 100, z: Math.sin(ang) * dist, s: 12 + rand() * 16, puffs: 2 + Math.floor(rand() * 3) });
+  }
+
+  return { seed, map: 'canyon', islands, arches, balloons, clouds };
+}
+
+function generateCitadelLayout(rand, seed) {
+  const islands = [];
+  // Central colossal aerostat citadel
+  islands.push({
+    kind: 'citadel',
+    x: 0, y: 25, z: 0,
+    r: 125,
+    cx: 0, cy: 15, cz: 0,
+    rx: 115, ry: 48, rz: 115,
+  });
+
+  // 4 satellite aerostats
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + (rand() - 0.5) * 0.3;
+    const dist = 320 + rand() * 80;
+    const r = 46 + rand() * 18;
+    const y = 70 + rand() * 45;
+    islands.push({
+      kind: 'aerostat',
+      x: Math.cos(ang) * dist, y, z: Math.sin(ang) * dist,
+      r,
+      cx: Math.cos(ang) * dist, cy: y - r * 0.25, cz: Math.sin(ang) * dist,
+      rx: r * 1.1, ry: r * 0.8, rz: r * 1.1,
+    });
+  }
+
+  // 4 observation spire towers
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const dist = 240 + rand() * 40;
+    const sx = Math.cos(ang) * dist;
+    const sz = Math.sin(ang) * dist;
+    islands.push({
+      kind: 'spire_tower',
+      x: sx, y: 65, z: sz,
+      r: 25,
+      cx: sx, cy: 45, cz: sz,
+      rx: 28, ry: 75, rz: 28,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.2;
+    const dist = 160 + rand() * 320;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 45 + rand() * 85;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 15, gateR: 11, hue: i % 2, style: 'cyber' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 40; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 48; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 80 + rand() * 950;
+    clouds.push({ x: Math.cos(ang) * dist, y: 170 + rand() * 120, z: Math.sin(ang) * dist, s: 14 + rand() * 22, puffs: 4 + Math.floor(rand() * 3) });
+  }
+
+  return { seed, map: 'citadel', islands, arches, balloons, clouds };
+}
+
+function generateSpiresLayout(rand, seed) {
+  const islands = [];
+  // 10 towering limestone needle spires rising directly from the sea
+  const needleCount = 10;
+  for (let i = 0; i < needleCount; i++) {
+    const ang = (i / needleCount) * Math.PI * 2 + (rand() - 0.5) * 0.35;
+    const dist = 150 + (i % 2 === 0 ? 30 : 130) + rand() * 40;
+    const r = 22 + rand() * 14;
+    const h = 80 + rand() * 55;
+    const sx = Math.cos(ang) * dist;
+    const sz = Math.sin(ang) * dist;
+    islands.push({
+      kind: 'karst_needle',
+      x: sx, y: h / 2, z: sz,
+      r, height: h,
+      cx: sx, cy: h * 0.45, cz: sz,
+      rx: r, ry: h * 0.6, rz: r,
+    });
+  }
+
+  // 4 outer floating karst crags
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + rand() * 0.4;
+    const dist = 360 + rand() * 80;
+    const r = 42 + rand() * 18;
+    const y = 35 + rand() * 45;
+    islands.push({
+      kind: 'floating',
+      x: Math.cos(ang) * dist, y, z: Math.sin(ang) * dist,
+      r,
+      cx: Math.cos(ang) * dist, cy: y - r * 0.3, cz: Math.sin(ang) * dist,
+      rx: r * 1.05, ry: r * 0.8, rz: r * 1.05,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.25;
+    const dist = 130 + rand() * 300;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 25 + rand() * 80;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2, style: 'karst' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 44; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 34; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 100 + rand() * 900;
+    clouds.push({ x: Math.cos(ang) * dist, y: 155 + rand() * 110, z: Math.sin(ang) * dist, s: 10 + rand() * 18, puffs: 3 + Math.floor(rand() * 4) });
+  }
+
+  return { seed, map: 'spires', islands, arches, balloons, clouds };
+}
+
+function generateLayout(seed, map = 'archipelago') {
+  const rand = mulberry32(seed);
+  if (map === 'canyon') return generateCanyonLayout(rand, seed);
+  if (map === 'citadel') return generateCitadelLayout(rand, seed);
+  if (map === 'spires') return generateSpiresLayout(rand, seed);
+  return generateArchipelagoLayout(rand, seed);
+}
+
 module.exports = {
   mulberry32,
   quatFromYPR, forwardFromYP, wrapAngle,
   clamp, lerp, vlen, vsub, vdot, vnorm, vscale, vadd, dist, r2, r3,
   islandCollision,
+  randomBalloonPos,
+  generateArchipelagoLayout,
+  generateCanyonLayout,
+  generateCitadelLayout,
+  generateSpiresLayout,
+  generateLayout,
   WEATHER_TYPES, WEATHER_LABELS, generateWeather,
   EVENT_TYPES, EVENT_DURATIONS, EVENT_AT_S, EVENT_BALLOON_HP, EVENT_BLIMP_HP, EVENT_BLIMP_RADIUS, EVENT_BLIMP_SPEED, EVENT_BLIMP_Y, generateEvent,
   homingAngle,

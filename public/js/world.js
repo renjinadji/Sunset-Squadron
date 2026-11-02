@@ -30,7 +30,12 @@ function randomBalloonPos(rand, islands) {
     const y = 30 + rand() * 110;
     let ok = true;
     for (const isl of islands) {
-      if (Math.hypot(x - isl.x, z - isl.z) < isl.rx + 12 && y < isl.cy + isl.ry + 20 && y > isl.cy - isl.ry - 10) {
+      const rx = isl.rx || isl.r || 50;
+      const ry = isl.ry || isl.r || 50;
+      const rz = isl.rz || rx;
+      const dx = (x - isl.cx) / rx;
+      const dz = (z - isl.cz) / rz;
+      if (dx * dx + dz * dz < 1.3 && y < isl.cy + ry + 20 && y > isl.cy - ry - 10) {
         ok = false;
         break;
       }
@@ -40,10 +45,10 @@ function randomBalloonPos(rand, islands) {
   return { x: 0, y: 160, z: 0 };
 }
 
-export function generateLayout(seed) {
-  const rand = mulberry32(seed);
+function generateArchipelagoLayout(rand, seed) {
   const islands = [];
-  islands.push({ kind: 'central', x: 0, y: 0, z: 0, r: 110, cx: 0, cy: 2, cz: 0, rx: 108, ry: 46 });
+  // Central caldera island: collision ellipsoid centred at sea level.
+  islands.push({ kind: 'central', x: 0, y: 0, z: 0, r: 110, cx: 0, cy: 2, cz: 0, rx: 108, ry: 46, rz: 108 });
   const outer = 6;
   for (let i = 0; i < outer; i++) {
     const ang = (i / outer) * Math.PI * 2 + (rand() - 0.5) * 0.5;
@@ -61,6 +66,7 @@ export function generateLayout(seed) {
       cz: Math.sin(ang) * dist,
       rx: r * 1.02,
       ry: r * 0.75,
+      rz: r * 1.02,
     });
   }
   const arches = [];
@@ -81,7 +87,7 @@ export function generateLayout(seed) {
     }
     const y = 35 + rand() * 90;
     const yaw = rand() * Math.PI * 2;
-    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2 });
+    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2, style: 'classic' });
   }
   const balloons = [];
   for (let i = 0; i < 40; i++) {
@@ -94,19 +100,239 @@ export function generateLayout(seed) {
     const dist = 100 + rand() * 900;
     clouds.push({ x: Math.cos(ang) * dist, y: 150 + rand() * 120, z: Math.sin(ang) * dist, s: 10 + rand() * 18, puffs: 3 + Math.floor(rand() * 4) });
   }
-  return { seed, islands, arches, balloons, clouds };
+  return { seed, map: 'archipelago', islands, arches, balloons, clouds };
+}
+
+function generateCanyonLayout(rand, seed) {
+  const islands = [];
+  // 4 massive elongated canyon walls forming intersecting cross trenches
+  const wallAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+  for (let i = 0; i < 4; i++) {
+    const ang = wallAngles[i] + (rand() - 0.5) * 0.15;
+    const d = 190 + rand() * 30;
+    const wx = Math.cos(ang) * d;
+    const wz = Math.sin(ang) * d;
+    const yaw = ang + Math.PI / 2;
+    islands.push({
+      kind: 'canyon_wall',
+      x: wx, y: 22, z: wz,
+      yaw,
+      length: 220, width: 65, height: 70,
+      cx: wx, cy: 22, cz: wz,
+      rx: 110, ry: 48, rz: 35,
+    });
+  }
+
+  // 4 freestanding plateau mesas in the corners
+  const cornerAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+  for (let i = 0; i < 4; i++) {
+    const ang = cornerAngles[i] + (rand() - 0.5) * 0.2;
+    const d = 330 + rand() * 60;
+    const mx = Math.cos(ang) * d;
+    const mz = Math.sin(ang) * d;
+    const r = 48 + rand() * 18;
+    islands.push({
+      kind: 'mesa',
+      x: mx, y: 32, z: mz,
+      r,
+      cx: mx, cy: 25, cz: mz,
+      rx: r, ry: 50, rz: r,
+    });
+  }
+
+  // 3 high-altitude floating sandstone island plateaus
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI * 2 + rand() * 0.5;
+    const d = 260 + rand() * 80;
+    const r = 36 + rand() * 16;
+    const y = 85 + rand() * 35;
+    islands.push({
+      kind: 'floating',
+      x: Math.cos(ang) * d, y, z: Math.sin(ang) * d,
+      r,
+      cx: Math.cos(ang) * d, cy: y - r * 0.3, cz: Math.sin(ang) * d,
+      rx: r * 1.05, ry: r * 0.75, rz: r * 1.05,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.25;
+    const dist = 140 + rand() * 320;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 28 + rand() * 75;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 15, gateR: 11, hue: i % 2, style: 'sandstone' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 42; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 28; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 120 + rand() * 850;
+    clouds.push({ x: Math.cos(ang) * dist, y: 140 + rand() * 100, z: Math.sin(ang) * dist, s: 12 + rand() * 16, puffs: 2 + Math.floor(rand() * 3) });
+  }
+
+  return { seed, map: 'canyon', islands, arches, balloons, clouds };
+}
+
+function generateCitadelLayout(rand, seed) {
+  const islands = [];
+  // Central colossal aerostat citadel
+  islands.push({
+    kind: 'citadel',
+    x: 0, y: 25, z: 0,
+    r: 125,
+    cx: 0, cy: 15, cz: 0,
+    rx: 115, ry: 48, rz: 115,
+  });
+
+  // 4 satellite aerostats
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + (rand() - 0.5) * 0.3;
+    const dist = 320 + rand() * 80;
+    const r = 46 + rand() * 18;
+    const y = 70 + rand() * 45;
+    islands.push({
+      kind: 'aerostat',
+      x: Math.cos(ang) * dist, y, z: Math.sin(ang) * dist,
+      r,
+      cx: Math.cos(ang) * dist, cy: y - r * 0.25, cz: Math.sin(ang) * dist,
+      rx: r * 1.1, ry: r * 0.8, rz: r * 1.1,
+    });
+  }
+
+  // 4 observation spire towers
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const dist = 240 + rand() * 40;
+    const sx = Math.cos(ang) * dist;
+    const sz = Math.sin(ang) * dist;
+    islands.push({
+      kind: 'spire_tower',
+      x: sx, y: 65, z: sz,
+      r: 25,
+      cx: sx, cy: 45, cz: sz,
+      rx: 28, ry: 75, rz: 28,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.2;
+    const dist = 160 + rand() * 320;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 45 + rand() * 85;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 15, gateR: 11, hue: i % 2, style: 'cyber' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 40; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 48; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 80 + rand() * 950;
+    clouds.push({ x: Math.cos(ang) * dist, y: 170 + rand() * 120, z: Math.sin(ang) * dist, s: 14 + rand() * 22, puffs: 4 + Math.floor(rand() * 3) });
+  }
+
+  return { seed, map: 'citadel', islands, arches, balloons, clouds };
+}
+
+function generateSpiresLayout(rand, seed) {
+  const islands = [];
+  // 10 towering limestone needle spires rising directly from the sea
+  const needleCount = 10;
+  for (let i = 0; i < needleCount; i++) {
+    const ang = (i / needleCount) * Math.PI * 2 + (rand() - 0.5) * 0.35;
+    const dist = 150 + (i % 2 === 0 ? 30 : 130) + rand() * 40;
+    const r = 22 + rand() * 14;
+    const h = 80 + rand() * 55;
+    const sx = Math.cos(ang) * dist;
+    const sz = Math.sin(ang) * dist;
+    islands.push({
+      kind: 'karst_needle',
+      x: sx, y: h / 2, z: sz,
+      r, height: h,
+      cx: sx, cy: h * 0.45, cz: sz,
+      rx: r, ry: h * 0.6, rz: r,
+    });
+  }
+
+  // 4 outer floating karst crags
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + rand() * 0.4;
+    const dist = 360 + rand() * 80;
+    const r = 42 + rand() * 18;
+    const y = 35 + rand() * 45;
+    islands.push({
+      kind: 'floating',
+      x: Math.cos(ang) * dist, y, z: Math.sin(ang) * dist,
+      r,
+      cx: Math.cos(ang) * dist, cy: y - r * 0.3, cz: Math.sin(ang) * dist,
+      rx: r * 1.05, ry: r * 0.8, rz: r * 1.05,
+    });
+  }
+
+  const arches = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + (rand() - 0.5) * 0.25;
+    const dist = 130 + rand() * 300;
+    let x = Math.cos(ang) * dist;
+    let z = Math.sin(ang) * dist;
+    const y = 25 + rand() * 80;
+    const yaw = rand() * Math.PI * 2;
+    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2, style: 'karst' });
+  }
+
+  const balloons = [];
+  for (let i = 0; i < 44; i++) {
+    const p = randomBalloonPos(rand, islands);
+    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
+  }
+
+  const clouds = [];
+  for (let i = 0; i < 34; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 100 + rand() * 900;
+    clouds.push({ x: Math.cos(ang) * dist, y: 155 + rand() * 110, z: Math.sin(ang) * dist, s: 10 + rand() * 18, puffs: 3 + Math.floor(rand() * 4) });
+  }
+
+  return { seed, map: 'spires', islands, arches, balloons, clouds };
+}
+
+export function generateLayout(seed, map = 'archipelago') {
+  const rand = mulberry32(seed);
+  if (map === 'canyon') return generateCanyonLayout(rand, seed);
+  if (map === 'citadel') return generateCitadelLayout(rand, seed);
+  if (map === 'spires') return generateSpiresLayout(rand, seed);
+  return generateArchipelagoLayout(rand, seed);
 }
 
 /** Returns { n: THREE.Vector3 outward normal, push, island } if pos is inside an island ellipsoid, else null. */
 export function islandCollision(pos, islands) {
   for (const isl of islands) {
-    const dx = (pos.x - isl.cx) / isl.rx;
-    const dy = (pos.y - isl.cy) / isl.ry;
-    const dz = (pos.z - isl.cz) / isl.rx;
+    const rx = isl.rx || isl.r || 50;
+    const ry = isl.ry || isl.r || 50;
+    const rz = isl.rz || rx;
+    const dx = (pos.x - isl.cx) / rx;
+    const dy = (pos.y - isl.cy) / ry;
+    const dz = (pos.z - isl.cz) / rz;
     const q = dx * dx + dy * dy + dz * dz;
     if (q < 1) {
-      const n = new THREE.Vector3(dx / isl.rx, dy / isl.ry, dz / isl.rx).normalize();
-      const push = (1 - Math.sqrt(q)) * Math.min(isl.rx, isl.ry) + 2;
+      const n = new THREE.Vector3(dx / rx, dy / ry, dz / rz).normalize();
+      const push = (1 - Math.sqrt(q)) * Math.min(rx, ry, rz) + 2;
       return { n, push, island: isl };
     }
   }
@@ -276,7 +502,21 @@ function buildArch(a, rand) {
   const group = new THREE.Group();
   group.position.set(a.x, a.y, a.z);
   group.rotation.y = a.yaw;
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6d6378, flatShading: true, roughness: 0.9, metalness: 0.02 });
+
+  let stoneColor = 0x6d6378;
+  let gateColor = a.hue === 0 ? 0x4ff1ff : 0xff4fd8;
+  if (a.style === 'sandstone') {
+    stoneColor = 0xb05d3b;
+    gateColor = a.hue === 0 ? 0xff9a3c : 0xff5522;
+  } else if (a.style === 'cyber') {
+    stoneColor = 0x242232;
+    gateColor = a.hue === 0 ? 0x00f0ff : 0xff00aa;
+  } else if (a.style === 'karst') {
+    stoneColor = 0x5c6168;
+    gateColor = a.hue === 0 ? 0x22ffdd : 0x00e5ff;
+  }
+
+  const stoneMat = new THREE.MeshStandardMaterial({ color: stoneColor, flatShading: true, roughness: 0.9, metalness: 0.02 });
   const arc = new THREE.TorusGeometry(a.r, 3.2, 6, 18, Math.PI);
   const pos = arc.attributes.position;
   const v = new THREE.Vector3();
@@ -297,7 +537,6 @@ function buildArch(a, rand) {
     cap.position.set(side * a.r, -(a.r + 6), 0);
     group.add(cap);
   }
-  const gateColor = a.hue === 0 ? 0x4ff1ff : 0xff4fd8;
   const gateMat = new THREE.MeshStandardMaterial({ color: gateColor, emissive: gateColor, emissiveIntensity: 3.2, roughness: 0.3, metalness: 0.2, flatShading: true });
   const gate = new THREE.Mesh(new THREE.TorusGeometry(a.gateR, 0.75, 8, 40), gateMat);
   gate.name = 'gate';
@@ -310,6 +549,256 @@ function buildArch(a, rand) {
   group.userData.gateMat = gateMat;
   group.userData.gate = gate;
   return group;
+}
+
+function buildCanyonWall(isl, rand) {
+  const len = isl.length || 220;
+  const wid = isl.width || 65;
+  const h = isl.height || 70;
+  let geo = new THREE.CylinderGeometry(wid * 0.45, wid * 0.55, h, 20, 8);
+  geo.scale(len / wid, 1, 1);
+  geo.translate(0, h / 2, 0);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const ox = rand() * 100, oz = rand() * 100;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const nz = noise3(v.x * 0.08 + ox, v.y * 0.08, v.z * 0.08 + oz);
+    if (v.y > h - 0.05) {
+      v.y += nz * 3;
+    } else {
+      v.x *= 1 + nz * 0.12;
+      v.z *= 1 + nz * 0.12;
+      v.y += nz * 4;
+    }
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo = geo.toNonIndexed();
+  geo.computeVertexNormals();
+  paintCanyonTerrain(geo, isl.y, isl.y, isl.y + h, rand);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  if (isl.yaw) group.rotation.y = isl.yaw;
+  group.add(mesh);
+  return group;
+}
+
+function buildDesertMesa(isl, rand) {
+  const r = isl.r || 48;
+  const h = 55;
+  let geo = new THREE.CylinderGeometry(r * 0.85, r * 1.15, h, 22, 6);
+  geo.translate(0, h / 2, 0);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const ox = rand() * 100, oz = rand() * 100;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const nz = noise3(v.x * 0.1 + ox, v.y * 0.1, v.z * 0.1 + oz);
+    if (v.y > h - 0.05) {
+      v.y += nz * 2.5;
+    } else {
+      v.x *= 1 + nz * 0.1;
+      v.z *= 1 + nz * 0.1;
+      v.y += nz * 3;
+    }
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo = geo.toNonIndexed();
+  geo.computeVertexNormals();
+  paintCanyonTerrain(geo, isl.y, isl.y, isl.y + h, rand);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  group.add(mesh);
+  return group;
+}
+
+function paintCanyonTerrain(geo, meshY, base, top, rand) {
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const n = new THREE.Vector3(), tmp = new THREE.Color();
+  const C_SANDSTONE = new THREE.Color('#d47848');
+  const C_TERRACOTTA = new THREE.Color('#a8442a');
+  const C_CRIMSON_SHALE = new THREE.Color('#782a1c');
+  const C_MESA_TOP = new THREE.Color('#e8c170');
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    n.subVectors(c, b).cross(a.clone().sub(b)).normalize();
+    const y = (a.y + b.y + c.y) / 3 + meshY;
+    const ny = n.y;
+    if (ny > 0.65) {
+      tmp.copy(C_MESA_TOP).lerp(C_SANDSTONE, rand() * 0.3);
+    } else {
+      const band = Math.sin(y * 0.35 + (a.x + b.x) * 0.05);
+      if (band > 0.3) tmp.copy(C_TERRACOTTA);
+      else if (band < -0.3) tmp.copy(C_CRIMSON_SHALE);
+      else tmp.copy(C_SANDSTONE);
+    }
+    const v = 1 + (rand() - 0.5) * 0.08;
+    tmp.r *= v; tmp.g *= v; tmp.b *= v;
+    for (let k = 0; k < 3; k++) {
+      colors[(i + k) * 3] = tmp.r;
+      colors[(i + k) * 3 + 1] = tmp.g;
+      colors[(i + k) * 3 + 2] = tmp.b;
+    }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+function buildCitadelIsland(isl, rand) {
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  const r = isl.r || 125;
+  const baseGeo = new THREE.CylinderGeometry(r * 0.85, r * 1.15, 45, 8, 4);
+  baseGeo.translate(0, 22.5, 0);
+  const baseMesh = new THREE.Mesh(
+    baseGeo,
+    new THREE.MeshStandardMaterial({ color: 0x2e3240, roughness: 0.6, metalness: 0.4, flatShading: true })
+  );
+  baseMesh.castShadow = true;
+  baseMesh.receiveShadow = true;
+  group.add(baseMesh);
+
+  const towerGeo = new THREE.CylinderGeometry(18, 28, 95, 8);
+  towerGeo.translate(0, 75, 0);
+  const towerMesh = new THREE.Mesh(
+    towerGeo,
+    new THREE.MeshStandardMaterial({ color: 0x1f222d, roughness: 0.4, metalness: 0.6, flatShading: true })
+  );
+  towerMesh.castShadow = true;
+  group.add(towerMesh);
+
+  const stripMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+  for (let i = 0; i < 4; i++) {
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(6, 60), stripMat);
+    strip.rotation.x = -Math.PI / 2;
+    strip.rotation.z = (i / 4) * Math.PI * 2;
+    strip.position.set(0, 45.2, 0);
+    strip.translateY(45);
+    group.add(strip);
+  }
+
+  const haloMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.85 });
+  const summitRing = new THREE.Mesh(new THREE.TorusGeometry(19, 1.2, 6, 24), haloMat);
+  summitRing.rotation.x = Math.PI / 2;
+  summitRing.position.y = 118;
+  group.add(summitRing);
+  return group;
+}
+
+function buildSpireTower(isl, rand) {
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  const towerGeo = new THREE.CylinderGeometry(6, 22, 110, 8, 4);
+  towerGeo.translate(0, 55, 0);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x242834, roughness: 0.5, metalness: 0.5, flatShading: true });
+  const mesh = new THREE.Mesh(towerGeo, mat);
+  mesh.castShadow = true;
+  group.add(mesh);
+  const beacon = new THREE.Mesh(
+    new THREE.SphereGeometry(4, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+  );
+  beacon.position.y = 112;
+  group.add(beacon);
+  return group;
+}
+
+function buildAerostatPlatform(isl, rand) {
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  const r = isl.r || 46;
+  const platGeo = new THREE.CylinderGeometry(r * 0.95, r * 1.1, 26, 12, 2);
+  platGeo.translate(0, 13, 0);
+  const mesh = new THREE.Mesh(
+    platGeo,
+    new THREE.MeshStandardMaterial({ color: 0x333848, roughness: 0.6, metalness: 0.35, flatShading: true })
+  );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(r * 1.05, 1.1, 6, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff00aa })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 26.2;
+  group.add(ring);
+  return group;
+}
+
+function buildKarstNeedle(isl, rand) {
+  const group = new THREE.Group();
+  group.position.set(isl.x, isl.y, isl.z);
+  const r = isl.r || 22;
+  const h = isl.height || 85;
+  let geo = new THREE.CylinderGeometry(r * 0.45, r * 1.1, h, 16, 10);
+  geo.translate(0, h / 2, 0);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const ox = rand() * 100, oz = rand() * 100;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const nz = noise3(v.x * 0.12 + ox, v.y * 0.12, v.z * 0.12 + oz);
+    if (v.y < 22 && Math.abs(v.z) < 14) {
+      v.x = Math.sign(v.x || 1) * (Math.abs(v.x) + 12);
+    }
+    v.x *= 1 + nz * 0.15;
+    v.z *= 1 + nz * 0.15;
+    if (v.y > h - 5) v.y += nz * 8;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo = geo.toNonIndexed();
+  geo.computeVertexNormals();
+  paintKarstTerrain(geo, isl.y, 0, h, rand);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  return group;
+}
+
+function paintKarstTerrain(geo, meshY, base, top, rand) {
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const n = new THREE.Vector3(), tmp = new THREE.Color();
+  const C_LIMESTONE = new THREE.Color('#646870');
+  const C_DARK_ROCK = new THREE.Color('#383b42');
+  const C_MOSS = new THREE.Color('#2d9e64');
+  const C_CYAN_MOSS = new THREE.Color('#38d9a9');
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    n.subVectors(c, b).cross(a.clone().sub(b)).normalize();
+    const y = (a.y + b.y + c.y) / 3 + meshY;
+    const ny = n.y;
+    if (ny > 0.55 && y > 18) {
+      tmp.copy(C_MOSS).lerp(C_CYAN_MOSS, rand() * 0.5);
+    } else {
+      tmp.copy(C_DARK_ROCK).lerp(C_LIMESTONE, Math.min(1, Math.max(0, y / top)));
+    }
+    const v = 1 + (rand() - 0.5) * 0.08;
+    tmp.r *= v; tmp.g *= v; tmp.b *= v;
+    for (let k = 0; k < 3; k++) {
+      colors[(i + k) * 3] = tmp.r;
+      colors[(i + k) * 3 + 1] = tmp.g;
+      colors[(i + k) * 3 + 2] = tmp.b;
+    }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 
 function buildCloudGeometry(clouds, rand) {
@@ -368,19 +857,28 @@ void main() {
 // World
 // ---------------------------------------------------------------------------
 export class World {
-  constructor(scene, seed) {
+  constructor(scene, seed, map = 'archipelago') {
     this.scene = scene;
     this.seed = seed;
-    this.layout = generateLayout(seed);
+    this.map = map;
+    this.layout = generateLayout(seed, map);
     this.group = new THREE.Group();
     this.arches = [];
     this.time = 0;
     const rand = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     this.rand = rand;
 
-    // Islands
+    // Islands & biome structures
     for (const isl of this.layout.islands) {
-      const mesh = isl.kind === 'central' ? buildCentralIsland(isl, rand) : buildFloatingIsland(isl, rand);
+      let mesh;
+      if (isl.kind === 'central') mesh = buildCentralIsland(isl, rand);
+      else if (isl.kind === 'canyon_wall') mesh = buildCanyonWall(isl, rand);
+      else if (isl.kind === 'mesa') mesh = buildDesertMesa(isl, rand);
+      else if (isl.kind === 'citadel') mesh = buildCitadelIsland(isl, rand);
+      else if (isl.kind === 'spire_tower') mesh = buildSpireTower(isl, rand);
+      else if (isl.kind === 'aerostat') mesh = buildAerostatPlatform(isl, rand);
+      else if (isl.kind === 'karst_needle') mesh = buildKarstNeedle(isl, rand);
+      else mesh = buildFloatingIsland(isl, rand);
       this.group.add(mesh);
     }
 
@@ -391,13 +889,20 @@ export class World {
       this.group.add(g);
     }
 
-    // Ocean
+    // Ocean / canyon basin floor
     const oceanGeo = new THREE.PlaneGeometry(2500, 2500, 96, 96);
     oceanGeo.rotateX(-Math.PI / 2);
     this.oceanBase = Float32Array.from(oceanGeo.attributes.position.array);
     // Roughness 0.45 keeps the low sun's glint on the water as a soft sparkle instead of a
     // mirror-like highlight that would blow past the bloom threshold and flood the screen pink.
-    this.oceanMat = new THREE.MeshStandardMaterial({ color: 0x0f5e78, roughness: 0.45, metalness: 0.05, flatShading: true });
+    const MAP_WATER_COLORS = {
+      archipelago: 0x0f5e78,
+      canyon: 0x9e472a,
+      citadel: 0x406085,
+      spires: 0x084252,
+    };
+    const initialWater = MAP_WATER_COLORS[map] || 0x0f5e78;
+    this.oceanMat = new THREE.MeshStandardMaterial({ color: initialWater, roughness: 0.45, metalness: 0.05, flatShading: true });
     this.ocean = new THREE.Mesh(oceanGeo, this.oceanMat);
     this.ocean.position.y = WATER_LEVEL;
     this.ocean.receiveShadow = true;
@@ -435,7 +940,17 @@ export class World {
     this.skyUniforms.starAmount.value = stars ? 1 : 0;
   }
 
-  setOceanColor(hex) { this.oceanMat.color.set(hex); }
+  setOceanColor(hex) {
+    if (this.map === 'canyon') {
+      this.oceanMat.color.set(0x9e472a);
+    } else if (this.map === 'citadel') {
+      this.oceanMat.color.set(0x406085);
+    } else if (this.map === 'spires') {
+      this.oceanMat.color.set(0x084252);
+    } else {
+      this.oceanMat.color.set(hex);
+    }
+  }
 
   update(dt, cameraPos) {
     this.time += dt;

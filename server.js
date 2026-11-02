@@ -19,6 +19,7 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const PILOT_DATA = require('./shared/pilots');
 const SHOP_DATA = require('./shared/shop');
+const MAP_DATA = require('./shared/maps');
 const { Leaderboard } = require('./leaderboard');
 const {
   mulberry32, quatFromYPR, forwardFromYP, wrapAngle,
@@ -28,8 +29,11 @@ const {
   EVENT_TYPES, generateEvent,
   assessRocketThreat,
   computeCreditPayout,
+  randomBalloonPos,
+  generateLayout,
 } = require('./server/logic');
 const { PILOTS, POWERUPS, POWERUP_TYPES, PILOT_IDS, pilotById, perkMultipliers } = PILOT_DATA;
+const { MAPS, MAP_METADATA, mapById } = MAP_DATA;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -129,86 +133,9 @@ const TEAMS = ['red', 'blue'];
 const TEAM_HIT_PTS = 10;            // points for hitting an enemy pilot
 
 // ---------------------------------------------------------------------------
-// Shared deterministic world layout (identical code lives in public/js/world.js)
-// mulberry32 and the per-round weather generator live in server/logic.js
+// Shared deterministic world layout:
+// randomBalloonPos, generateLayout, and biome generators live in server/logic.js
 // ---------------------------------------------------------------------------
-
-function randomBalloonPos(rand, islands) {
-  for (let tries = 0; tries < 20; tries++) {
-    const ang = rand() * Math.PI * 2;
-    const dist = 60 + rand() * 560;
-    const x = Math.cos(ang) * dist;
-    const z = Math.sin(ang) * dist;
-    const y = 30 + rand() * 110;
-    let ok = true;
-    for (const isl of islands) {
-      if (Math.hypot(x - isl.x, z - isl.z) < isl.rx + 12 && y < isl.cy + isl.ry + 20 && y > isl.cy - isl.ry - 10) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return { x, y, z };
-  }
-  return { x: 0, y: 160, z: 0 };
-}
-
-function generateLayout(seed) {
-  const rand = mulberry32(seed);
-  const islands = [];
-  // Central caldera island: collision ellipsoid centred at sea level.
-  islands.push({ kind: 'central', x: 0, y: 0, z: 0, r: 110, cx: 0, cy: 2, cz: 0, rx: 108, ry: 46 });
-  const outer = 6;
-  for (let i = 0; i < outer; i++) {
-    const ang = (i / outer) * Math.PI * 2 + (rand() - 0.5) * 0.5;
-    const dist = 300 + rand() * 140;
-    const r = 42 + rand() * 34;
-    const y = 40 + rand() * 70;
-    islands.push({
-      kind: 'floating',
-      x: Math.cos(ang) * dist,
-      y,
-      z: Math.sin(ang) * dist,
-      r,
-      cx: Math.cos(ang) * dist,
-      cy: y - r * 0.3,
-      cz: Math.sin(ang) * dist,
-      rx: r * 1.02,
-      ry: r * 0.75,
-    });
-  }
-  const arches = [];
-  for (let i = 0; i < 12; i++) {
-    const ang = (i / 12) * Math.PI * 2 + (rand() - 0.5) * 0.3;
-    const dist = 170 + rand() * 330;
-    let x = Math.cos(ang) * dist;
-    let z = Math.sin(ang) * dist;
-    for (const isl of islands) {
-      const dx = x - isl.x;
-      const dz = z - isl.z;
-      const d = Math.hypot(dx, dz);
-      if (d < isl.rx + 34) {
-        const k = (isl.rx + 34) / Math.max(d, 1);
-        x = isl.x + dx * k;
-        z = isl.z + dz * k;
-      }
-    }
-    const y = 35 + rand() * 90;
-    const yaw = rand() * Math.PI * 2;
-    arches.push({ id: i, x, y, z, yaw, r: 14, gateR: 10, hue: i % 2 });
-  }
-  const balloons = [];
-  for (let i = 0; i < 40; i++) {
-    const p = randomBalloonPos(rand, islands);
-    balloons.push({ id: i, x: p.x, y: p.y, z: p.z, tint: Math.floor(rand() * 6) });
-  }
-  const clouds = [];
-  for (let i = 0; i < 36; i++) {
-    const ang = rand() * Math.PI * 2;
-    const dist = 100 + rand() * 900;
-    clouds.push({ x: Math.cos(ang) * dist, y: 150 + rand() * 120, z: Math.sin(ang) * dist, s: 10 + rand() * 18, puffs: 3 + Math.floor(rand() * 4) });
-  }
-  return { seed, islands, arches, balloons, clouds };
-}
 
 /**
  * Checkpoint Race course: RACE_GATES ring gates forming an open loop inside
@@ -290,7 +217,7 @@ const state = {
   phase: 'lobby',               // lobby | playing | ended
   seed: (Math.random() * 0x7fffffff) >>> 0,
   layout: null,
-  settings: { mode: 'crown', preset: 'sunset', bots: 2 },
+  settings: { mode: 'crown', preset: 'sunset', bots: 2, map: 'archipelago' },
   hostId: null,
   players: new Map(),           // id -> player (humans and bots)
   joinOrder: [],
@@ -323,7 +250,7 @@ const state = {
   endedAt: 0,
   lastResults: null,
 };
-state.layout = generateLayout(state.seed);
+state.layout = generateLayout(state.seed, state.settings.map);
 state.weather = generateWeather(state.seed);
 
 function now() { return Date.now() / 1000; }
@@ -768,7 +695,7 @@ app.get('/api/host-info', async (req, res) => {
     const requested = typeof req.query.url === 'string' ? req.query.url.trim().replace(/\/+$/, '') : '';
     if (requested && /^https?:\/\/[\w.\-:[\]]+$/.test(requested) && requested.length < 200) url = requested;
     const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: '#1a1030', light: '#fff6e8' } });
-    res.json({ url, qrDataUrl, seed: state.seed, isPublicUrl: Boolean(PUBLIC_URL) });
+    res.json({ url, qrDataUrl, seed: state.seed, map: state.settings.map || 'archipelago', isPublicUrl: Boolean(PUBLIC_URL) });
   } catch (err) {
     res.status(500).json({ error: String(err && err.message ? err.message : err) });
   }
@@ -780,6 +707,10 @@ app.get('/js/pilots-data.js', (req, res) => {
 
 app.get('/js/shop-data.js', (req, res) => {
   res.type('application/javascript').set('Cache-Control', 'no-cache').send(SHOP_DATA.toEsModuleSource());
+});
+
+app.get('/js/maps-data.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-cache').send(MAP_DATA.toEsModuleSource());
 });
 
 app.get('/api/shop', (req, res) => {
@@ -967,6 +898,7 @@ function detachPlayer(player) {
 function roundStartPayload() {
   return {
     seed: state.seed,
+    map: state.settings.map || 'archipelago',
     mode: state.settings.mode,
     preset: state.settings.preset,
     weather: state.weather,
@@ -1000,7 +932,7 @@ function startRound() {
   removeAllGone();
   // New world every round so the archipelago stays fresh (overridable via SEED env for testing)
   state.seed = process.env.SEED ? (parseInt(process.env.SEED, 10) >>> 0) : ((Math.random() * 0x7fffffff) >>> 0);
-  state.layout = generateLayout(state.seed);
+  state.layout = generateLayout(state.seed, state.settings.map || 'archipelago');
   state.weather = generateWeather(state.seed);
   // Remove previous bots, add new ones
   for (const b of bots()) state.players.delete(b.id);
@@ -1464,10 +1396,17 @@ io.on('connection', (socket) => {
   socket.on('setSettings', (data) => {
     if (!player || socket.id !== state.hostId || !data || typeof data !== 'object') return;
     let changedPreset = false;
+    let changedMap = false;
     if (MODES.includes(data.mode)) state.settings.mode = data.mode;
     if (PRESETS.includes(data.preset) && data.preset !== state.settings.preset) { state.settings.preset = data.preset; changedPreset = true; }
+    if (MAPS.includes(data.map) && data.map !== state.settings.map) {
+      state.settings.map = data.map;
+      state.layout = generateLayout(state.seed, state.settings.map);
+      changedMap = true;
+    }
     if ([0, 2, 3, 4].includes(Number(data.bots))) state.settings.bots = Number(data.bots);
     if (changedPreset) io.emit('preset', { preset: state.settings.preset });
+    if (changedMap) io.emit('map', { map: state.settings.map });
     broadcastLobby();
   });
 

@@ -1115,8 +1115,29 @@
     * Synchronized visual knockback displacement for remote AI wingmen so players clearly see allies get slammed backward by boss attacks.
   - **Automated Tests:** Added `test/boss.test.js` unit test asserting knockback magnitudes, directional vectors, aerodynamic decay, and control dampening. All 65 unit tests passing (100%).
 
+- **Procedural Multi-Map System (`shared/maps.js`, `server.js`, `server/logic.js`, `public/js/world.js`, `public/js/main.js`, `public/index.html`, `test/maps.test.js`):**
+  - **4 Distinct Procedural Biome Maps:**
+    * **Caldera Archipelago (`archipelago`):** The classic tropical volcanic caldera ringed by floating paradise islands, tropical palm groves, and turquoise ocean waters.
+    * **Canyon Trenches (`canyon`):** Massive elongated sandstone canyon walls forming intersecting deep trench runs, freestanding plateau mesas, high-altitude desert plateaus, and dusty red clay canyon basins (`0x9e472a`).
+    * **Sky Citadel (`citadel`):** Futuristic high-altitude floating aerostat metropolis featuring a colossal hexagonal citadel hub, satellite aerostat platforms, observation spire towers, cyber neon arches, and misty cloudbase sea (`0x406085`).
+    * **Neon Spires (`spires`):** Towering limestone sea-karst needle pillars rising directly from the sea, natural hollow sea arches for low-altitude fly-through dogfights, outer crags, and deep bioluminescent lagoon waters (`0x084252`).
+  - **Shared Architecture & Determinism (`shared/maps.js`, `server/logic.js`, `public/js/world.js`):**
+    * `shared/maps.js` provides the single source of truth for map IDs, names, biomes, descriptions, and water colors, served as an ES module to clients via `GET /js/maps-data.js`.
+    * Upgraded `islandCollision(pos, islands)` with non-uniform horizontal axis support (`rz = isl.rz || rx`), enabling realistic elongated canyon trenches without breaking backward compatibility.
+    * Seed-deterministic layout generation guarantees identical island positions, collision ellipsoids, arches, balloons, and cloud formations on both server and client.
+  - **Procedural 3D Mesh Generation & Aesthetics (`public/js/world.js`):**
+    * Tailored procedural builders using non-indexed vertex colors and flat shading: `buildCanyonWall`, `buildDesertMesa`, `paintCanyonTerrain`, `buildCitadelIsland`, `buildSpireTower`, `buildAerostatPlatform`, `buildKarstNeedle`, `paintKarstTerrain`, and styled arches (`classic`, `sandstone`, `cyber`, `karst`).
+    * Biome-specific water/ground coloring preserves distinctive atmospheric aesthetics while remaining compatible with weather presets and bloom post-processing.
+    * Retains 60 FPS performance with zero external asset downloads.
+  - **Lobby Synchronization & Match Flow (`server.js`, `public/js/main.js`, `public/index.html`):**
+    * Added interactive `#map-toggle` selector inside host settings panel.
+    * Real-time Socket.IO synchronization via `setSettings` -> `map` event and `broadcastLobby()`, immediately updating the 3D lobby background for all pilots.
+    * `roundStartPayload` includes selected `map` and broadcasts an on-screen feed alert (`Map: <Name>`) upon round launch.
+    * Seamless compatibility with all 5 game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue, Boss Raid).
+  - **Automated Tests:** Added `test/maps.test.js` test suite validating metadata catalog, ES module generation, seed determinism across all 4 maps, island kinds, arch styles, non-uniform ellipsoid collision math, and balloon placement. All 71 unit tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
 - Optional future enhancements:
   * Additional party sponsor modifiers or boss raid variants.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
