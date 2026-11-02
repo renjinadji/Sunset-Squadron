@@ -232,6 +232,24 @@ function compareRaceResults(a, b) {
 }
 
 /**
+ * Returns true if all active (non-gone) participants have crossed the final finish gate.
+ */
+function isRaceComplete(players) {
+  const active = (Array.isArray(players) ? players : [...players.values()]).filter((p) => p && !p.gone);
+  if (!active.length) return false;
+  return active.every((p) => p.race && p.race.finished);
+}
+
+/**
+ * Returns true if all active (non-gone) human racers have finished.
+ */
+function areHumanRacersFinished(players) {
+  const activeHumans = (Array.isArray(players) ? players : [...players.values()]).filter((p) => p && !p.isBot && !p.gone);
+  if (!activeHumans.length) return false;
+  return activeHumans.every((p) => p.race && p.race.finished);
+}
+
+/**
  * Determines whether a rocket poses an incoming threat to a target position.
  * Returns { threatening: boolean, distance: number, closingSpeed: number, alignment: number, timeToImpact: number, critical: boolean }
  */
@@ -637,6 +655,7 @@ module.exports = {
   homingAngle,
   RACE_FINISH_BASE, RACE_FINISH_STEP, RACE_FINISH_MIN, raceFinishPoints,
   gateCrossing, compareRaceResults,
+  isRaceComplete, areHumanRacersFinished,
   assessRocketThreat,
   computeCreditPayout,
 };

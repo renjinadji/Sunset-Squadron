@@ -1136,6 +1136,24 @@
     * Seamless compatibility with all 5 game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue, Boss Raid).
   - **Automated Tests:** Added `test/maps.test.js` test suite validating metadata catalog, ES module generation, seed determinism across all 4 maps, island kinds, arch styles, non-uniform ellipsoid collision math, and balloon placement. All 71 unit tests passing (100%).
 
+- **Checkpoint Race Early Finish Engine (`server.js`, `server/logic.js`, `public/js/main.js`, `test/race.test.js`, `test/logic.test.js`):**
+  - **Problem Solved:** Checkpoint Race previously ran until the entire 180s round timer expired even after all racers had crossed the finish line, leaving finished pilots flying aimlessly for minutes.
+  - **Authoritative Race Completion Detection (`server/logic.js`, `server.js`):**
+    * Added `isRaceComplete(players)`: Authoritative evaluation returning `true` when all active (non-`gone`) racers have `p.race.finished === true`.
+    * Added `areHumanRacersFinished(players)`: Detects when all active human pilots have completed the course.
+    * Integrated `checkRaceFinish(t)` in `server.js` called from `stepRaceGate`, `tick()`, and `detachPlayer()`.
+  - **Dynamic Finish Rules & Timers (`server.js`):**
+    * **All Racers Finished (Immediate 2.0s Finish):** When all active racers cross the finish line, the server broadcasts `raceComplete` and schedules `endRound()` in 2.0 seconds, allowing finish fanfare and particle bursts to play before transitioning to the results scoreboard.
+    * **All Humans Finished (10s AI Cap):** If all human pilots finish while bots are still flying, the round timer is capped to at most 10 seconds (`Date.now() + 10000`) so human players don't wait on stalled bots.
+    * **Winner Countdown (30s Grace):** When 1st place finishes, remaining racers are given up to a 30-second countdown window (`Math.min(roundEndsAt, Date.now() + 30000)`).
+    * **Graceful Disconnects:** Racers who disconnect mid-race (`p.gone = true`) never block round completion for the remaining active racers.
+    * **Elapsed Finish Time Accuracy:** `p.race.finishTime` computes directly from `now() - state.roundStartedAt` rather than timer subtraction.
+    * **Timeout Safety:** `state.raceEndingTimeout` is cleanly reset on round start, end, and lobby return.
+  - **Client HUD & Feedback (`public/js/main.js`):**
+    * Added `socket.on('raceComplete')` broadcasting feed notice `🏁 All racers have crossed the finish line!`.
+    * Smooth real-time snapshot sync of `timeRemaining` on the client timer.
+  - **Automated Tests:** Added `test/race.test.js` and updated `test/logic.test.js` verifying `isRaceComplete`, `areHumanRacersFinished`, disconnected racer handling, finish rank points, and DNF ordering. All 77 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
 - Optional future enhancements:

@@ -630,6 +630,9 @@ function connectSocket() {
   socket.on('pop', (e) => onPop(e));
   socket.on('gate', (e) => onGate(e));
   socket.on('finish', (e) => onFinish(e));
+  socket.on('raceComplete', () => {
+    addFeed('🏁 All racers have crossed the finish line!');
+  });
   socket.on('crown', (e) => onCrownEvent(e));
   socket.on('bossHit', (data) => {
     if (ui.bossHpNumbers) ui.bossHpNumbers.textContent = `${data.hp} / ${data.maxHp} HP`;

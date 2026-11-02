@@ -26,6 +26,7 @@ const {
   clamp, lerp, vlen, vsub, vdot, vnorm, vscale, vadd, dist, r2, r3,
   islandCollision, generateWeather, homingAngle,
   raceFinishPoints, gateCrossing, compareRaceResults,
+  isRaceComplete, areHumanRacersFinished,
   EVENT_TYPES, generateEvent,
   assessRocketThreat,
   computeCreditPayout,
@@ -248,6 +249,7 @@ const state = {
   roundStartedAt: 0,            // seconds (now()) when the round began, for event timing
   roundEndsAt: 0,
   endedAt: 0,
+  raceEndingTimeout: null,
   lastResults: null,
 };
 state.layout = generateLayout(state.seed, state.settings.map);
@@ -876,6 +878,7 @@ function detachPlayer(player) {
   const heldTeam = heldTeamCrown(player.id);
   if (heldTeam) dropTeamCrown(heldTeam, player.pos);
   updateHost();
+  if (state.settings.mode === 'race') checkRaceFinish(now());
   if (humans().length === 0 && state.phase !== 'lobby') {
     // Nobody left: reset so the next visitor gets a clean lobby
     state.phase = 'lobby';
@@ -928,6 +931,10 @@ function roundStartPayload() {
 
 function startRound() {
   if (state.phase === 'playing') return;
+  if (state.raceEndingTimeout) {
+    clearTimeout(state.raceEndingTimeout);
+    state.raceEndingTimeout = null;
+  }
   // New round = clean slate: pilots who never rejoined lose their seat
   removeAllGone();
   // New world every round so the archipelago stays fresh (overridable via SEED env for testing)
@@ -1060,6 +1067,10 @@ function startRound() {
 
 function endRound() {
   if (state.phase !== 'playing') return;
+  if (state.raceEndingTimeout) {
+    clearTimeout(state.raceEndingTimeout);
+    state.raceEndingTimeout = null;
+  }
   state.phase = 'ended';
   state.endedAt = Date.now();
   endEvent();   // drop any active mid-round event (clients hide the pill)
@@ -1154,6 +1165,10 @@ function endRound() {
 }
 
 function returnToLobby() {
+  if (state.raceEndingTimeout) {
+    clearTimeout(state.raceEndingTimeout);
+    state.raceEndingTimeout = null;
+  }
   state.phase = 'lobby';
   for (const b of bots()) state.players.delete(b.id);
   removeAllGone();
@@ -1993,12 +2008,50 @@ function stepRaceGate(p, t) {
   } else {
     p.race.finished = true;
     p.race.finishRank = ++state.race.finishCount;
-    p.race.finishTime = r2(Math.max(0, ROUND_SECONDS - Math.max(0, (state.roundEndsAt - Date.now()) / 1000)));
+    p.race.finishTime = r2(Math.max(0, state.roundStartedAt ? now() - state.roundStartedAt : (ROUND_SECONDS - Math.max(0, (state.roundEndsAt - Date.now()) / 1000))));
     const pts = raceFinishPoints(p.race.finishRank);
     awardPoints(p, pts, t);
     io.emit('gate', { id: a.id, by: p.id, p: [r2(a.x), r2(a.y), r2(a.z)], race: true, gi: total, total });
     io.emit('finish', { id: p.id, rank: p.race.finishRank, points: pts, time: p.race.finishTime, p: [r2(a.x), r2(a.y), r2(a.z)] });
     console.log(`[race] ${p.name} finished ${p.race.finishRank}${p.race.finishRank === 1 ? 'st' : p.race.finishRank === 2 ? 'nd' : p.race.finishRank === 3 ? 'rd' : 'th'} (+${pts})`);
+    checkRaceFinish(t);
+  }
+}
+
+function checkRaceFinish(t) {
+  if (state.phase !== 'playing' || state.settings.mode !== 'race' || !state.race) return;
+  const active = [...state.players.values()].filter((p) => !p.gone);
+  if (!active.length) return;
+
+  // 1. Everyone has finished the race!
+  if (isRaceComplete(active)) {
+    if (!state.raceEndingTimeout) {
+      console.log(`[race] Everyone finished (${state.race.finishCount}/${active.length})! Ending race round in 2.0s...`);
+      io.emit('raceComplete', { total: state.race.finishCount });
+      state.raceEndingTimeout = setTimeout(() => {
+        state.raceEndingTimeout = null;
+        if (state.phase === 'playing' && state.settings.mode === 'race') {
+          endRound();
+        }
+      }, 2000);
+    }
+    return;
+  }
+
+  // 2. All active human pilots finished: give remaining AI wingmen at most 10s to complete
+  if (areHumanRacersFinished(active)) {
+    const maxBotTimeMs = 10000;
+    if (state.roundEndsAt > Date.now() + maxBotTimeMs) {
+      state.roundEndsAt = Date.now() + maxBotTimeMs;
+      console.log('[race] All human pilots finished! Shortening timer for remaining AI wingmen to 10s.');
+    }
+  } else if (state.race.finishCount >= 1) {
+    // 3. First finisher crossed the line: 30s countdown for remaining racers
+    const maxGraceMs = 30000;
+    if (state.roundEndsAt > Date.now() + maxGraceMs) {
+      state.roundEndsAt = Date.now() + maxGraceMs;
+      console.log('[race] First finisher crossed! Countdown set to 30s.');
+    }
   }
 }
 
@@ -3266,6 +3319,7 @@ function tick() {
     stepBalloons(t);
     stepPickups(t);
     stepStyle(t);
+    if (state.settings.mode === 'race') checkRaceFinish(t);
     const before = state.players.size;
     purgeExpiredGone(t);
     if (state.players.size !== before) broadcastLobby();

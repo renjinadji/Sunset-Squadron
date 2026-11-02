@@ -214,6 +214,57 @@ test('compareRaceResults: finishers by rank, then time; rest by gates then score
   assert.deepStrictEqual(sorted, [finished1, finished2b, finished2, dnf9gates, dnf3gates, dnf3gatesLow]);
 });
 
+test('isRaceComplete: true only when all active racers have crossed the finish line', () => {
+  assert.strictEqual(logic.isRaceComplete([]), false, 'Empty players returns false');
+
+  const p1 = { id: 'p1', isBot: false, gone: false, race: { finished: false, finishRank: 0 } };
+  const p2 = { id: 'p2', isBot: false, gone: false, race: { finished: false, finishRank: 0 } };
+  const bot1 = { id: 'bot-1', isBot: true, gone: false, race: { finished: false, finishRank: 0 } };
+
+  // Nobody finished
+  assert.strictEqual(logic.isRaceComplete([p1, p2, bot1]), false);
+
+  // 1 human finished
+  p1.race.finished = true;
+  p1.race.finishRank = 1;
+  assert.strictEqual(logic.isRaceComplete([p1, p2, bot1]), false);
+
+  // Both humans finished, bot still racing
+  p2.race.finished = true;
+  p2.race.finishRank = 2;
+  assert.strictEqual(logic.isRaceComplete([p1, p2, bot1]), false);
+
+  // All active racers finished
+  bot1.race.finished = true;
+  bot1.race.finishRank = 3;
+  assert.strictEqual(logic.isRaceComplete([p1, p2, bot1]), true);
+
+  // If a player disconnects (gone = true), they do not block completion
+  const p3 = { id: 'p3', isBot: false, gone: true, race: { finished: false, finishRank: 0 } };
+  assert.strictEqual(logic.isRaceComplete([p1, p2, bot1, p3]), true);
+});
+
+test('areHumanRacersFinished: true when all active humans have finished', () => {
+  assert.strictEqual(logic.areHumanRacersFinished([]), false, 'Empty list returns false');
+
+  const p1 = { id: 'p1', isBot: false, gone: false, race: { finished: false, finishRank: 0 } };
+  const p2 = { id: 'p2', isBot: false, gone: false, race: { finished: false, finishRank: 0 } };
+  const bot1 = { id: 'bot-1', isBot: true, gone: false, race: { finished: false, finishRank: 0 } };
+
+  // Only p1 finished
+  p1.race.finished = true;
+  assert.strictEqual(logic.areHumanRacersFinished([p1, p2, bot1]), false);
+
+  // Both active humans finished (bot1 still racing)
+  p2.race.finished = true;
+  assert.strictEqual(logic.areHumanRacersFinished([p1, p2, bot1]), true);
+
+  // If p2 disconnected, and only p1 is active and finished
+  p2.gone = true;
+  p2.race.finished = false;
+  assert.strictEqual(logic.areHumanRacersFinished([p1, p2, bot1]), true);
+});
+
 test('perkMultipliers: every pilot maps to a defined perk with correct multipliers', () => {
   const PILOT_DATA = require('../shared/pilots');
   assert.strictEqual(PILOT_DATA.PILOTS.length, 12);
