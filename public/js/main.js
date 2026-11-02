@@ -164,6 +164,7 @@ const me = {
   boost: false,
   rollingUntil: 0,
   tumble: 0,
+  knockback: new THREE.Vector3(0, 0, 0),
   superUntil: 0,
   invuln: false,
   lastFire: -10,
@@ -1539,6 +1540,7 @@ function startRound(data) {
   if (self) { me.pos.set(self.pos.x, self.pos.y, self.pos.z); me.yaw = self.yaw; }
   else { me.pos.set(0, 90, 260); me.yaw = 0; }
   me.pitch = 0; me.roll = 0; me.speed = SPEED_BASE; me.stamina = 1; me.rollingUntil = 0; me.tumble = 0;
+  me.knockback.set(0, 0, 0);
   me.superUntil = 0; me.invuln = false; me.lastFire = -10; me.lastRadarFire = -10; me.score = 0; me.fx = {}; me.fxAt = nowS();
   me.gi = 0; me.gp = 0; me.fin = 0;
   quatFromYPR(me.quat, me.yaw, 0, 0);
@@ -2013,21 +2015,64 @@ function onHit(e) {
   gfx.particles.burst(p, 18, 10, { colors: GOLD_COLORS, life: 0.8, size: 1.6 });
   sound.fireworkPop(volumeForDistance(p.distanceTo(me.pos)));
   if (e.victim === game.myId) {
-    me.tumble = e.bullet ? 0.45 : 0.6;
-    gfx.addShake(e.bullet ? 0.7 : 0.9);
-    if (e.bullet) {
-      sound.bossBulletHit(Boolean(e.isRing));
-      addFeed(e.isRing ? '⚠️ Titan Cyberspace Ring clipped your jet!' : '⚠️ Titan Autocannon hit your jet!');
-    } else if (e.shooter === 'boss') {
-      addFeed('⚠️ Titan Homing Missile struck your jet!');
-    } else if (e.meteor) {
-      addFeed('Meteor strike! You tumbled!');
-    } else if (e.mine) {
-      addFeed(`${nameOf(e.shooter)}'s sky mine hit you!`);
+    const isBoss = Boolean(e.shooter === 'boss' || e.isBossAttack);
+    if (isBoss) {
+      // Sonic Frontiers heavy knockback impulse
+      if (e.kb && Array.isArray(e.kb) && e.kb.length >= 3) {
+        me.knockback.set(e.kb[0], e.kb[1], e.kb[2]);
+      } else {
+        const away = new THREE.Vector3().subVectors(me.pos, p);
+        if (away.lengthSq() < 0.01) away.set(0, 0.35, 1);
+        away.normalize();
+        me.knockback.copy(away).multiplyScalar(e.bullet ? 34 : e.bossRam ? 78 : 68);
+      }
+
+      if (e.bullet) {
+        me.tumble = e.isRing ? 0.65 : 0.5;
+        me.speed = Math.max(18, me.speed - (e.isRing ? 22 : 14));
+        gfx.addShake(e.isRing ? 1.25 : 0.85);
+        sound.bossBulletHit(Boolean(e.isRing));
+        addFeed(e.isRing ? '💥 Titan Cyberspace Ring blasted your jet backward!' : '💥 Titan Autocannon knocked your jet back!');
+      } else if (e.bossRam) {
+        me.tumble = 0.8;
+        me.speed = Math.max(15, me.speed - 35);
+        gfx.addShake(1.7);
+        sound.bump();
+        addFeed('💥 Heavy collision with Dreadnought hull! Catapulted away!');
+      } else {
+        me.tumble = 0.75;
+        me.speed = Math.max(15, me.speed - 30);
+        gfx.addShake(1.55);
+        if (e.isFlak || e.meteor) {
+          addFeed('💥 Titan Flak burst knocked your jet backward!');
+        } else if (e.mine) {
+          addFeed('💥 Titan Proximity Mine exploded! Heavy knockback!');
+        } else {
+          addFeed('💥 Titan Homing Missile struck! Heavy knockback!');
+        }
+      }
     } else {
-      addFeed(e.crownStolen ? `${nameOf(e.shooter)} stole your crown!` : `${nameOf(e.shooter)} tagged you with a firework!`);
+      me.tumble = e.bullet ? 0.45 : 0.6;
+      gfx.addShake(e.bullet ? 0.7 : 0.9);
+      if (e.meteor) {
+        addFeed('Meteor strike! You tumbled!');
+      } else if (e.mine) {
+        addFeed(`${nameOf(e.shooter)}'s sky mine hit you!`);
+      } else {
+        addFeed(e.crownStolen ? `${nameOf(e.shooter)} stole your crown!` : `${nameOf(e.shooter)} tagged you with a firework!`);
+      }
     }
-  } else if (e.shooter === game.myId) {
+  } else {
+    // If an ally wingman or other player was struck by the boss with knockback, apply visual kick
+    const rVictim = remote.get(e.victim);
+    if (rVictim && (e.shooter === 'boss' || e.isBossAttack) && e.kb) {
+      rVictim.tumble = e.bullet ? 0.5 : 0.75;
+      rVictim.pos.x += e.kb[0] * 0.12;
+      rVictim.pos.y += e.kb[1] * 0.12;
+      rVictim.pos.z += e.kb[2] * 0.12;
+    }
+  }
+  if (e.shooter === game.myId) {
     if (e.mine) addFeed(`Your sky mine struck ${nameOf(e.victim)}!`);
     else addFeed(e.crownStolen ? `You stole the crown from ${nameOf(e.victim)}!` : `Direct hit on ${nameOf(e.victim)}!`);
     if (game.mode === 'blitz') showBanner('+5');
@@ -2507,12 +2552,20 @@ function stepLocalFlight(dt) {
   const boostSpd = SPEED_BOOST * (game.perk.boostSpeed || 1);
   const target = sup ? SPEED_SUPER : turbo ? TURBO_SPEED : (boost || me.invuln) ? boostSpd : SPEED_BASE;
   me.speed = lerp(me.speed, target, Math.min(1, dt * 3));
-  me.yaw = wrapAngle(me.yaw + -joyX * 2.1 * game.perk.turn * dt);
-  me.pitch = lerp(me.pitch, -joyY * 0.75, Math.min(1, dt * 6));
-  me.roll = lerp(me.roll, -joyX * 1.05, Math.min(1, dt * 8));
+  const ctrlDamp = me.tumble > 0 ? clamp(1 - (me.tumble / 0.8) * 0.75, 0.25, 1) : 1;
+  me.yaw = wrapAngle(me.yaw + -joyX * 2.1 * game.perk.turn * dt * ctrlDamp);
+  me.pitch = lerp(me.pitch, -joyY * 0.75 * ctrlDamp, Math.min(1, dt * 6));
+  me.roll = lerp(me.roll, -joyX * 1.05 * ctrlDamp, Math.min(1, dt * 8));
   forwardFromYP(tmpV, me.yaw, me.pitch);
   me.pos.addScaledVector(tmpV, me.speed * dt);
   if (game.windVec) me.pos.addScaledVector(game.windVec, dt);
+
+  // Boss attack knockback impulse displacement & aerodynamic drag decay
+  if (me.knockback && me.knockback.lengthSq() > 0.01) {
+    me.pos.addScaledVector(me.knockback, dt);
+    me.knockback.multiplyScalar(Math.exp(-dt * 4.0));
+    if (me.knockback.lengthSq() < 0.01) me.knockback.set(0, 0, 0);
+  }
 
   // Soft ocean bounce
   if (me.pos.y < WATER_LEVEL + 3) {

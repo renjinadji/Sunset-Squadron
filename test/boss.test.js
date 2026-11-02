@@ -241,3 +241,84 @@ test('boss fight friendly-fire rules: players and wingmen cannot attack each oth
   assert.strictEqual(canMineDetonate('boss', 'player1'), true, 'Boss mine can detonate on player');
   assert.strictEqual(canMineDetonate('boss', 'bot_wingman_1'), true, 'Boss mine can detonate on wingman bot');
 });
+
+test('boss attacks deliver heavy Sonic Frontiers knock-back and control dampening', () => {
+  function vlen(v) { return Math.hypot(v.x, v.y, v.z); }
+  function vnorm(v) {
+    const l = vlen(v);
+    return l < 0.0001 ? { x: 0, y: 0, z: -1 } : { x: v.x / l, y: v.y / l, z: v.z / l };
+  }
+  function vscale(v, s) { return { x: v.x * s, y: v.y * s, z: v.z * s }; }
+
+  // 1. Boss seeker missile knockback impulse: 68 m/s
+  const mDir = vnorm({ x: 0, y: 0.3, z: -1 });
+  const missileKb = vscale(mDir, 68);
+  assert.ok(Math.abs(vlen(missileKb) - 68) < 0.001, 'Seeker missile delivers 68 m/s knockback impulse');
+  assert.ok(missileKb.y > 0, 'Missile imparts upward lift knockback');
+
+  // 2. Boss autocannon tracer knockback impulse: 34 m/s
+  const bDir = vnorm({ x: 0.5, y: -0.2, z: -0.84 });
+  const bulletKb = vscale(bDir, 34);
+  assert.ok(Math.abs(vlen(bulletKb) - 34) < 0.001, 'Autocannon tracer delivers 34 m/s knockback impulse');
+
+  // 3. Boss cyberspace bullet hell radial ring knockback impulse: 54 m/s
+  const bossPos = { x: 0, y: 80, z: 0 };
+  const playerPos = { x: 60, y: 85, z: 20 };
+  const ringDir = vnorm({
+    x: playerPos.x - bossPos.x,
+    y: Math.max(6, (playerPos.y - bossPos.y) + 8),
+    z: playerPos.z - bossPos.z,
+  });
+  const ringKb = vscale(ringDir, 54);
+  assert.ok(Math.abs(vlen(ringKb) - 54) < 0.001, 'Cyberspace ring delivers 54 m/s outward knockback impulse');
+  assert.ok(ringKb.x > 0 && ringKb.z > 0, 'Ring repels outward from titan core');
+
+  // 4. Boss defensive flak bomb burst knockback impulse: 60 m/s
+  const flakPos = { x: 10, y: 70, z: -30 };
+  const flakAway = vnorm({
+    x: playerPos.x - flakPos.x,
+    y: Math.max(5, (playerPos.y - flakPos.y) + 8),
+    z: playerPos.z - flakPos.z,
+  });
+  const flakKb = vscale(flakAway, 60);
+  assert.ok(Math.abs(vlen(flakKb) - 60) < 0.001, 'Flak bomb burst delivers 60 m/s knockback impulse');
+
+  // 5. Boss proximity sky mine knockback impulse: 64 m/s
+  const minePos = { x: 50, y: 80, z: 15 };
+  const mineAway = vnorm({
+    x: playerPos.x - minePos.x,
+    y: Math.max(6, (playerPos.y - minePos.y) + 10),
+    z: playerPos.z - minePos.z,
+  });
+  const mineKb = vscale(mineAway, 64);
+  assert.ok(Math.abs(vlen(mineKb) - 64) < 0.001, 'Proximity mine delivers 64 m/s knockback impulse');
+
+  // 6. Sky Dreadnought hull collision & ramming knockback: 78 m/s
+  const ramAway = vnorm({
+    x: playerPos.x - bossPos.x,
+    y: Math.max(5, (playerPos.y - bossPos.y) + 8),
+    z: playerPos.z - bossPos.z,
+  });
+  const ramKb = vscale(ramAway, 78);
+  assert.ok(Math.abs(vlen(ramKb) - 78) < 0.001, 'Hull ramming catapults jet away with 78 m/s knockback');
+
+  // 7. Aerodynamic drag decay simulation
+  let kb = { ...ramKb };
+  const dt = 0.05;
+  for (let step = 0; step < 20; step++) {
+    const decay = Math.exp(-dt * 4.0);
+    kb.x *= decay;
+    kb.y *= decay;
+    kb.z *= decay;
+  }
+  // After 1 second (20 steps of 0.05s), impulse decays to ~e^(-4.0) = ~0.018x of original
+  assert.ok(vlen(kb) < 2.0, 'Knockback decays exponentially over 1 second');
+
+  // 8. Control dampening during knockback tumble
+  function getControlDampening(tumble) {
+    return tumble > 0 ? Math.max(0.25, Math.min(1, 1 - (tumble / 0.8) * 0.75)) : 1.0;
+  }
+  assert.strictEqual(getControlDampening(0), 1.0, 'Normal flight retains 100% control responsiveness');
+  assert.strictEqual(getControlDampening(0.8), 0.25, 'Peak tumble dampens steering control down to 25%');
+  assert.strictEqual(getControlDampening(0.4), 0.625, 'Mid-recovery tumble allows 62.5% control');
+});

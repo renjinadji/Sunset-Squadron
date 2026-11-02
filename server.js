@@ -368,6 +368,7 @@ function makePlayer(id, name, pilot, isBot) {
     superUntil: 0,
     lastFire: 0,
     lastRadarFire: 0,
+    knockback: { x: 0, y: 0, z: 0 },
     lastSeen: now(),
     lastCloseCallAt: 0,           // style: last close-call award time
     lowSince: 0,                  // style: when the current below-15m run started
@@ -437,6 +438,7 @@ function spawnPlayer(p, index, total, baseAng = 0, spread = Math.PI * 2) {
   p.rollingUntil = 0; p.tumbleUntil = 0; p.invulnUntil = 0; p.burstUntil = 0; p.superUntil = 0;
   p.lastFire = 0;
   p.lastRadarFire = 0;
+  p.knockback = { x: 0, y: 0, z: 0 };
   p.lastCloseCallAt = 0;
   p.lowSince = 0;
   p.lastLowAward = 0;
@@ -447,6 +449,14 @@ function spawnPlayer(p, index, total, baseAng = 0, spread = Math.PI * 2) {
   p.stamina = 1;
   p.fx = {};
   p.stats = { balloons: 0, hits: 0, crownTime: 0, pickups: 0 };
+}
+
+function applyKnockback(p, impulse) {
+  if (!p || !impulse) return;
+  if (!p.knockback) p.knockback = { x: 0, y: 0, z: 0 };
+  p.knockback.x += impulse.x;
+  p.knockback.y += impulse.y;
+  p.knockback.z += impulse.z;
 }
 
 /** Safe mid-round respawn for a reconnecting pilot: new position, same score/stats. */
@@ -1797,13 +1807,25 @@ function stepRockets(dt, t) {
       if (d < 8 && t >= p.invulnUntil && !(t < p.rollingUntil)) {
         dead = true;
         const shooter = state.players.get(r.owner);
+        const isBoss = (r.owner === 'boss' || r.isBossRocket);
         if (hasFx(p, 'shield', t)) {
           // Shield Bubble absorbs the hit and pops
           delete p.fx.shield;
           io.emit('shieldBreak', { id: p.id, by: r.owner, p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)] });
           break;
         }
-        p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
+
+        let kbVec = null;
+        if (isBoss) {
+          // Sonic Frontiers Titan missile knockback: violent propulsion along missile trajectory + upward lift
+          const mDir = vnorm({ x: r.d.x, y: Math.max(0.18, r.d.y + 0.22), z: r.d.z });
+          kbVec = vscale(mDir, 68);
+          applyKnockback(p, kbVec);
+          p.tumbleUntil = t + Math.max(0.75, TUMBLE_TIME * 1.25) * p.perk.tumble;
+        } else {
+          p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
+        }
+
         let crownStolen = false;
         if (shooter) shooter.stats.hits++;
         maybeBotEmote(p, t, BOT_HIT_EMOTES);
@@ -1821,7 +1843,15 @@ function stepRockets(dt, t) {
             giveTeamCrown(victimCrown, shooter.id, 'rocket', p.id);
           }
         }
-        io.emit('hit', { shooter: r.owner, victim: p.id, p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)], crownStolen });
+        io.emit('hit', {
+          shooter: r.owner,
+          victim: p.id,
+          p: [r2(r.p.x), r2(r.p.y), r2(r.p.z)],
+          crownStolen,
+          isBossAttack: isBoss,
+          isBossRocket: isBoss,
+          kb: kbVec ? [r2(kbVec.x), r2(kbVec.y), r2(kbVec.z)] : null,
+        });
         break;
       }
     }
@@ -1913,11 +1943,25 @@ function stepMines(dt, t) {
         if (d < 14 && t >= p.invulnUntil && !(t < p.rollingUntil)) {
           dead = true;
           const miner = state.players.get(m.owner);
+          const isBoss = (m.owner === 'boss');
           if (hasFx(p, 'shield', t)) {
             delete p.fx.shield;
             io.emit('shieldBreak', { id: p.id, by: m.owner, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
           } else {
-            p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
+            let kbVec = null;
+            if (isBoss) {
+              const away = vnorm({
+                x: p.pos.x - m.p.x,
+                y: Math.max(6, (p.pos.y - m.p.y) + 10),
+                z: p.pos.z - m.p.z,
+              });
+              kbVec = vscale(away, 64);
+              applyKnockback(p, kbVec);
+              p.tumbleUntil = t + Math.max(0.75, TUMBLE_TIME * 1.2) * p.perk.tumble;
+            } else {
+              p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
+            }
+
             let crownStolen = false;
             if (miner) miner.stats.hits++;
             maybeBotEmote(p, t, BOT_HIT_EMOTES);
@@ -1935,7 +1979,15 @@ function stepMines(dt, t) {
                 giveTeamCrown(victimCrown, miner.id, 'mine', p.id);
               }
             }
-            io.emit('hit', { shooter: m.owner, victim: p.id, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)], crownStolen, mine: true });
+            io.emit('hit', {
+              shooter: m.owner,
+              victim: p.id,
+              p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)],
+              crownStolen,
+              mine: true,
+              isBossAttack: isBoss,
+              kb: kbVec ? [r2(kbVec.x), r2(kbVec.y), r2(kbVec.z)] : null,
+            });
           }
           io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
           break;
@@ -2028,13 +2080,33 @@ function stepGatesAndPickups(t) {
         damageBlimp(3, p.id, t, p.pos);
       }
     }
-    // Sky Dreadnought ramming (deals 5 damage to boss, tumbles the pilot slightly)
+    // Sky Dreadnought hull collision & ramming (deals 5 damage to boss at speed, repels jet with massive knockback)
     const boss = state.boss;
-    if (boss && boss.alive && p.speed > BOSS_RAM_SPEED && dist(boss.pos, p.pos) < reach(p, BOSS_COLLISION_R, t)) {
-      if (t - (p.lastBossRamAt || 0) >= 1.0) {
+    if (boss && boss.alive && dist(boss.pos, p.pos) < reach(p, BOSS_COLLISION_R, t)) {
+      if (t - (p.lastBossRamAt || 0) >= 0.8) {
         p.lastBossRamAt = t;
-        p.tumbleUntil = t + TUMBLE_TIME * 0.6 * p.perk.tumble;
-        damageBoss(5, p.id, t, p.pos, false);
+        const away = vnorm({
+          x: p.pos.x - boss.pos.x,
+          y: Math.max(5, (p.pos.y - boss.pos.y) + 8),
+          z: p.pos.z - boss.pos.z,
+        });
+        const kbVec = vscale(away, 78);
+        applyKnockback(p, kbVec);
+        p.tumbleUntil = t + Math.max(0.8, TUMBLE_TIME * 1.35) * p.perk.tumble;
+
+        if (p.speed > BOSS_RAM_SPEED) {
+          damageBoss(5, p.id, t, p.pos, false);
+        }
+
+        io.emit('hit', {
+          shooter: 'boss',
+          victim: p.id,
+          p: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z)],
+          crownStolen: false,
+          bossRam: true,
+          isBossAttack: true,
+          kb: [r2(kbVec.x), r2(kbVec.y), r2(kbVec.z)],
+        });
       }
     }
     // Power-up orbs (all modes)
@@ -2576,11 +2648,36 @@ function stepBossBullets(dt, t) {
           delete p.fx.shield;
           io.emit('shieldBreak', { id: p.id, by: 'boss', p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)] });
         } else {
-          // Stagger/tumble: 0.45s tumble, debounced to prevent stunlock
-          if (t - (p.lastBulletHitAt || 0) >= 0.75) {
+          // Stagger/tumble and knock-back
+          let kbVec = null;
+          if (b.isRing) {
+            const bPos = state.boss ? state.boss.pos : b.p;
+            const outward = vnorm({
+              x: p.pos.x - bPos.x,
+              y: Math.max(6, (p.pos.y - bPos.y) + 8),
+              z: p.pos.z - bPos.z,
+            });
+            kbVec = vscale(outward, 54);
+          } else {
+            const bDir = vnorm(b.v);
+            kbVec = vscale(bDir, 34);
+          }
+          applyKnockback(p, kbVec);
+
+          // Stagger/tumble: debounced to prevent stunlock
+          if (t - (p.lastBulletHitAt || 0) >= (b.isRing ? 0.45 : 0.6)) {
             p.lastBulletHitAt = t;
-            p.tumbleUntil = t + 0.45 * p.perk.tumble;
-            io.emit('hit', { shooter: 'boss', victim: p.id, p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], crownStolen: false, bullet: true, isRing: Boolean(b.isRing) });
+            p.tumbleUntil = t + (b.isRing ? 0.65 : 0.5) * p.perk.tumble;
+            io.emit('hit', {
+              shooter: 'boss',
+              victim: p.id,
+              p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)],
+              crownStolen: false,
+              bullet: true,
+              isRing: Boolean(b.isRing),
+              isBossAttack: true,
+              kb: [r2(kbVec.x), r2(kbVec.y), r2(kbVec.z)],
+            });
           }
         }
         io.emit('boom', { p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)], small: true });
@@ -2691,8 +2788,32 @@ function stepMeteors(dt, t) {
           delete p.fx.shield;
           io.emit('shieldBreak', { id: p.id, by: null, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
         } else {
-          p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
-          io.emit('hit', { shooter: null, victim: p.id, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)], crownStolen: false, mine: false, meteor: true, bomb: Boolean(m.isBomb) });
+          const isFlak = Boolean(m.isFlak);
+          let kbVec = null;
+          if (isFlak) {
+            const away = vnorm({
+              x: p.pos.x - m.p.x,
+              y: Math.max(5, (p.pos.y - m.p.y) + 8),
+              z: p.pos.z - m.p.z,
+            });
+            kbVec = vscale(away, 60);
+            applyKnockback(p, kbVec);
+            p.tumbleUntil = t + Math.max(0.7, TUMBLE_TIME * 1.15) * p.perk.tumble;
+          } else {
+            p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
+          }
+          io.emit('hit', {
+            shooter: isFlak ? 'boss' : null,
+            victim: p.id,
+            p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)],
+            crownStolen: false,
+            mine: false,
+            meteor: true,
+            bomb: Boolean(m.isBomb),
+            isFlak,
+            isBossAttack: isFlak,
+            kb: kbVec ? [r2(kbVec.x), r2(kbVec.y), r2(kbVec.z)] : null,
+          });
         }
         io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
         break;
@@ -3079,6 +3200,17 @@ function stepFlight(p, joyX, joyY, boost, dt, t) {
   p.roll = lerp(p.roll, -joyX * 1.05, Math.min(1, dt * 8));
   const fwd = forwardFromYP(p.yaw, p.pitch);
   p.pos = vadd(p.pos, vscale(fwd, p.speed * dt));
+  // Knockback physics impulse & aerodynamic drag decay
+  if (p.knockback && (p.knockback.x !== 0 || p.knockback.y !== 0 || p.knockback.z !== 0)) {
+    p.pos = vadd(p.pos, vscale(p.knockback, dt));
+    const decay = Math.exp(-dt * 4.0);
+    p.knockback.x *= decay;
+    p.knockback.y *= decay;
+    p.knockback.z *= decay;
+    if (Math.hypot(p.knockback.x, p.knockback.y, p.knockback.z) < 0.1) {
+      p.knockback = { x: 0, y: 0, z: 0 };
+    }
+  }
   if (state.weather && state.weather.wind) {
     p.pos = vadd(p.pos, vscale(state.weather.wind, dt));
   }

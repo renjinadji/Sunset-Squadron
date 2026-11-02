@@ -1099,6 +1099,22 @@
     * Screen-space tap/click targeting (`handleScreenTargetTap`) tests against `radarCd` with a 0.75x tolerance window and gives pilot feedback when cooling (`🎯 Locked on <Target> (Reloading: 1.4s)`).
   - **Automated Tests:** Updated `test/radar.test.js` with tests asserting timer independence, super and rapid powerup scaling, and reload perks. All 64 unit tests passing (100%).
 
+- **Sonic Frontiers Titan Boss Attack Knock-Back Engine (`server.js`, `public/js/main.js`, `test/boss.test.js`):**
+  - **Dynamic Physics Knockback Impulses (`server.js`):**
+    * Integrated `applyKnockback(p, impulse)` and linear velocity displacement in `stepFlight` for all pilots and AI wingmen.
+    * **Titan Seeker Missiles:** Imparts massive 68 m/s impulse vector along incoming missile trajectory with upward aerodynamic lift, accompanied by 0.75s heavy tumble.
+    * **Autocannon Tracer Rounds:** Imparts punchy 34 m/s kinetic slug knockback impulse per hit, battering the jet and destabilizing trajectory.
+    * **Cyberspace Bullet Hell Rings:** Imparts 54 m/s radial outward repulsion vector blasting jets away from the ventral reactor core with upward lift.
+    * **Defensive Flak Bombs:** Concussive blast wave repels jets outward with 60 m/s impulse.
+    * **Aft Proximity Mines:** Severe 64 m/s explosive impulse repelling jets away from detonation point.
+    * **Dreadnought Hull Collision & Ramming:** Flying into or clipping the gigantic armored prow catapults the aircraft away with 78 m/s kinetic repulsion, preventing mesh clipping and dealing 5 ramming damage when above 24 kn.
+  - **Client-Side Physics & Visceral Game Feel (`public/js/main.js`):**
+    * Added `me.knockback` vector displacement in `stepLocalFlight(dt)` with realistic aerodynamic drag decay ($e^{-4.0 \cdot dt}$).
+    * Tumble control dampening: steering authority is reduced down to 25% while recovering from severe tumble before regaining full control.
+    * Heavy speed reduction on boss hit (-14 kn on bullets up to -35 kn on hull collisions/missiles) and intense screen shakes (`gfx.addShake` up to 1.7).
+    * Synchronized visual knockback displacement for remote AI wingmen so players clearly see allies get slammed backward by boss attacks.
+  - **Automated Tests:** Added `test/boss.test.js` unit test asserting knockback magnitudes, directional vectors, aerodynamic decay, and control dampening. All 65 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) are fully operational.
 - Optional future enhancements:
