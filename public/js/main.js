@@ -2017,6 +2017,7 @@ function onHit(e) {
   if (e.victim === game.myId) {
     const isBoss = Boolean(e.shooter === 'boss' || e.isBossAttack);
     if (isBoss) {
+      const isBossRocket = Boolean(e.isBossRocket || (e.shooter === 'boss' && !e.bullet && !e.bossRam && !e.isFlak && !e.meteor && !e.mine));
       // Sonic Frontiers heavy knockback impulse
       if (e.kb && Array.isArray(e.kb) && e.kb.length >= 3) {
         me.knockback.set(e.kb[0], e.kb[1], e.kb[2]);
@@ -2024,7 +2025,7 @@ function onHit(e) {
         const away = new THREE.Vector3().subVectors(me.pos, p);
         if (away.lengthSq() < 0.01) away.set(0, 0.35, 1);
         away.normalize();
-        me.knockback.copy(away).multiplyScalar(e.bullet ? 34 : e.bossRam ? 78 : 68);
+        me.knockback.copy(away).multiplyScalar(e.bullet ? 34 : e.bossRam ? 78 : isBossRocket ? 115 : 68);
       }
 
       if (e.bullet) {
@@ -2039,6 +2040,13 @@ function onHit(e) {
         gfx.addShake(1.7);
         sound.bump();
         addFeed('💥 Heavy collision with Dreadnought hull! Catapulted away!');
+      } else if (isBossRocket) {
+        // Extra knockback for Titan Seeker Missiles
+        me.tumble = 0.95;
+        me.speed = Math.max(12, me.speed - 42);
+        gfx.addShake(2.0);
+        sound.bump();
+        addFeed('💥 TITAN MISSILE DIRECT IMPACT! Catapulted backward!');
       } else {
         me.tumble = 0.75;
         me.speed = Math.max(15, me.speed - 30);
@@ -2066,10 +2074,12 @@ function onHit(e) {
     // If an ally wingman or other player was struck by the boss with knockback, apply visual kick
     const rVictim = remote.get(e.victim);
     if (rVictim && (e.shooter === 'boss' || e.isBossAttack) && e.kb) {
-      rVictim.tumble = e.bullet ? 0.5 : 0.75;
-      rVictim.pos.x += e.kb[0] * 0.12;
-      rVictim.pos.y += e.kb[1] * 0.12;
-      rVictim.pos.z += e.kb[2] * 0.12;
+      const isBossRocket = Boolean(e.isBossRocket || (!e.bullet && !e.bossRam && !e.isFlak && !e.meteor && !e.mine));
+      rVictim.tumble = isBossRocket ? 0.95 : (e.bullet ? 0.5 : 0.75);
+      const mult = isBossRocket ? 0.22 : 0.12;
+      rVictim.pos.x += e.kb[0] * mult;
+      rVictim.pos.y += e.kb[1] * mult;
+      rVictim.pos.z += e.kb[2] * mult;
     }
   }
   if (e.shooter === game.myId) {

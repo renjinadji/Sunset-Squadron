@@ -1102,7 +1102,7 @@
 - **Sonic Frontiers Titan Boss Attack Knock-Back Engine (`server.js`, `public/js/main.js`, `test/boss.test.js`):**
   - **Dynamic Physics Knockback Impulses (`server.js`):**
     * Integrated `applyKnockback(p, impulse)` and linear velocity displacement in `stepFlight` for all pilots and AI wingmen.
-    * **Titan Seeker Missiles:** Imparts massive 68 m/s impulse vector along incoming missile trajectory with upward aerodynamic lift, accompanied by 0.75s heavy tumble.
+    * **Titan Seeker Missiles (Extra Knock-Back):** Imparts a thunderous 115 m/s impulse vector along incoming missile trajectory with high upward aerodynamic lift (`Math.max(0.28, r.d.y + 0.35)`), accompanied by extended 0.95s heavy tumble spin, severe airspeed drop (-42 kn), and screen shake (2.0).
     * **Autocannon Tracer Rounds:** Imparts punchy 34 m/s kinetic slug knockback impulse per hit, battering the jet and destabilizing trajectory.
     * **Cyberspace Bullet Hell Rings:** Imparts 54 m/s radial outward repulsion vector blasting jets away from the ventral reactor core with upward lift.
     * **Defensive Flak Bombs:** Concussive blast wave repels jets outward with 60 m/s impulse.

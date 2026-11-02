@@ -1817,11 +1817,11 @@ function stepRockets(dt, t) {
 
         let kbVec = null;
         if (isBoss) {
-          // Sonic Frontiers Titan missile knockback: violent propulsion along missile trajectory + upward lift
-          const mDir = vnorm({ x: r.d.x, y: Math.max(0.18, r.d.y + 0.22), z: r.d.z });
-          kbVec = vscale(mDir, 68);
+          // Extra Sonic Frontiers Titan missile knockback: violent 115 m/s propulsion along missile trajectory + upward lift
+          const mDir = vnorm({ x: r.d.x, y: Math.max(0.28, r.d.y + 0.35), z: r.d.z });
+          kbVec = vscale(mDir, 115);
           applyKnockback(p, kbVec);
-          p.tumbleUntil = t + Math.max(0.75, TUMBLE_TIME * 1.25) * p.perk.tumble;
+          p.tumbleUntil = t + Math.max(0.95, TUMBLE_TIME * 1.6) * p.perk.tumble;
         } else {
           p.tumbleUntil = t + TUMBLE_TIME * p.perk.tumble;
         }

@@ -250,10 +250,10 @@ test('boss attacks deliver heavy Sonic Frontiers knock-back and control dampenin
   }
   function vscale(v, s) { return { x: v.x * s, y: v.y * s, z: v.z * s }; }
 
-  // 1. Boss seeker missile knockback impulse: 68 m/s
-  const mDir = vnorm({ x: 0, y: 0.3, z: -1 });
-  const missileKb = vscale(mDir, 68);
-  assert.ok(Math.abs(vlen(missileKb) - 68) < 0.001, 'Seeker missile delivers 68 m/s knockback impulse');
+  // 1. Boss seeker missile extra knockback impulse: 115 m/s
+  const mDir = vnorm({ x: 0, y: Math.max(0.28, 0.35), z: -1 });
+  const missileKb = vscale(mDir, 115);
+  assert.ok(Math.abs(vlen(missileKb) - 115) < 0.001, 'Seeker missile delivers extra 115 m/s knockback impulse');
   assert.ok(missileKb.y > 0, 'Missile imparts upward lift knockback');
 
   // 2. Boss autocannon tracer knockback impulse: 34 m/s
