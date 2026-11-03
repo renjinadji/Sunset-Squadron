@@ -1154,8 +1154,27 @@
     * Smooth real-time snapshot sync of `timeRemaining` on the client timer.
   - **Automated Tests:** Added `test/race.test.js` and updated `test/logic.test.js` verifying `isRaceComplete`, `areHumanRacersFinished`, disconnected racer handling, finish rank points, and DNF ordering. All 77 unit tests passing (100%).
 
+- **Red vs Blue Friendly-Fire Removal & Strict 1v1 / 2v2 Match Sizing (`server.js`, `server/logic.js`, `public/index.html`, `public/js/main.js`, `test/teams.test.js`):**
+  - **Complete Friendly-Fire Immunity in Red vs Blue:**
+    * **Rockets & Fireworks:** Teammates on the same team (Red vs Red, Blue vs Blue) cannot hit or damage each other with rockets, fireworks, or radar-guided missiles (`state.settings.mode === 'teams' && shooterTeam && p.team && shooterTeam === p.team`).
+    * **Barrel Roll Deflection & Close Call:** Deflections and near-miss "close call" style point awards are blocked between friendly teammates.
+    * **Homing Missiles:** Missiles never lock onto or track teammates or friendly decoys.
+    * **Proximity Sky Mines:** Teammates are completely immune to friendly mines; friendly mines never detonate or damage allies.
+    * **AI Bot Avoidance:** AI wingmen no longer swerve or flee in panic from friendly mines in Red vs Blue (`mode === 'teams' && minerTeam && p.team && minerTeam === p.team`).
+    * **Radar Tap/Click Targeting:** `findTargetAtScreenCoords` reliably resolves pilot team (`r.team || r.info.team`) and skips teammates on mobile tap and computer click.
+    * **HUD Missile Threat Warning:** `updateMissileWarningSystem` filters out all rockets fired by teammates.
+  - **Strict 1v1 or 2v2 Match Sizing:**
+    * Red vs Blue is strictly limited to 1v1 (2 pilots total: 1 Red vs 1 Blue) or 2v2 (4 pilots total: 2 Red vs 2 Blue).
+    * Lobby Host Settings: When Mode is "Red vs Blue", `#bots-setting` is hidden and replaced with an interactive Match Format toggle (`#team-format-toggle`: `[ 1v1 (2 pilots) ]` and `[ 2v2 (4 pilots) ]`). In other modes, `#bots-setting` is shown and `#team-format-toggle` is hidden.
+    * Real-time Socket.IO synchronization via `setSettings` -> `teamFormat` event (`['1v1', '2v2']`).
+    * Pure sizing and balancing logic in `server/logic.js` (`resolveTeamMatch`):
+      - In 1v1: total = 2. 1 human -> 1 bot added. 2 humans -> 0 bots added.
+      - In 2v2: total = 4. 1 human -> 3 bots added (1 human + 1 bot on Red vs 2 bots on Blue). 2 humans -> 2 bots added (1 human + 1 bot on Red vs 1 human + 1 bot on Blue, perfectly balanced). 3 humans -> 1 bot added (2 Red humans vs 1 Blue human + 1 Blue bot). 4 humans -> 0 bots added.
+    * Mid-Round Drop-In: If a human joins mid-round in Red vs Blue and an AI bot is playing, the human seamlessly replaces the bot on that team without exceeding the 1v1 or 2v2 limit.
+  - **Automated Tests:** Added test suite in `test/teams.test.js` validating `resolveTeamMatch` across 1v1 and 2v2 across 1-5 humans, `isFriendlyFire` matrix, and friendly fire safeguards across rockets, mines, homing targets, and radar lock. All 80 unit tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
 - Optional future enhancements:
   * Additional party sponsor modifiers or boss raid variants.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.

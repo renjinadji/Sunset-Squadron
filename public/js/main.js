@@ -82,6 +82,7 @@ const ui = {
   lbTabs: $('lb-tabs'), lbBody: $('lb-body'), lbHint: $('lb-hint'),
   btnLaunch: $('btn-launch'), btnStart: $('btn-start'), joinError: $('join-error'), hostWait: $('host-wait'),
   mapToggle: $('map-toggle'), modeToggle: $('mode-toggle'), presetToggle: $('preset-toggle'), botsToggle: $('bots-toggle'),
+  botsSetting: $('bots-setting'), teamFormatSetting: $('team-format-setting'), teamFormatToggle: $('team-format-toggle'),
   lobbyCreditsVal: $('lobby-credits-val'), btnOpenHangar: $('btn-open-hangar'), hangarNewBadge: $('hangar-new-badge'),
   lobbySponsorBanner: $('lobby-sponsor-banner'), lobbySponsorText: $('lobby-sponsor-text'),
   rosterSponsorStrip: $('roster-sponsor-strip'), rosterSponsorDesc: $('roster-sponsor-desc'), btnQuickSponsor: $('btn-quick-sponsor'),
@@ -538,7 +539,23 @@ function renderRoster(lobby) {
   }
   if (lobby.phase !== 'lobby') { game.rosterEditing = false; ui.rosterPicker.classList.add('hidden'); }
   const humans = lobby.players.filter((p) => !p.isBot).length;
-  ui.rosterCount.textContent = `${humans}/8 pilots · ${lobby.settings.bots} AI wingmen`;
+  const isTeams = lobby.settings.mode === 'teams';
+  if (ui.botsSetting) ui.botsSetting.classList.toggle('hidden', isTeams);
+  if (ui.teamFormatSetting) ui.teamFormatSetting.classList.toggle('hidden', !isTeams);
+
+  if (isTeams) {
+    const format = lobby.settings.teamFormat || '2v2';
+    const targetTotal = format === '1v1' ? 2 : 4;
+    const neededBots = Math.max(0, targetTotal - humans);
+    ui.rosterCount.textContent = `Red vs Blue · ${format} (${Math.min(humans, targetTotal)} human${humans === 1 ? '' : 's'} + ${neededBots} AI)`;
+    if (ui.teamFormatToggle) {
+      for (const b of ui.teamFormatToggle.children) {
+        b.classList.toggle('active', b.dataset.teamFormat === format);
+      }
+    }
+  } else {
+    ui.rosterCount.textContent = `${humans}/8 pilots · ${lobby.settings.bots} AI wingmen`;
+  }
   for (const b of ui.mapToggle.children) b.classList.toggle('active', b.dataset.map === (lobby.settings.map || 'archipelago'));
   for (const b of ui.modeToggle.children) b.classList.toggle('active', b.dataset.mode === lobby.settings.mode);
   for (const b of ui.presetToggle.children) b.classList.toggle('active', b.dataset.preset === lobby.settings.preset);
@@ -576,6 +593,9 @@ function wireLobby() {
   for (const b of ui.modeToggle.children) b.addEventListener('click', () => setting('mode', b.dataset.mode));
   for (const b of ui.presetToggle.children) b.addEventListener('click', () => setting('preset', b.dataset.preset));
   for (const b of ui.botsToggle.children) b.addEventListener('click', () => setting('bots', Number(b.dataset.bots)));
+  if (ui.teamFormatToggle) {
+    for (const b of ui.teamFormatToggle.children) b.addEventListener('click', () => setting('teamFormat', b.dataset.teamFormat));
+  }
 }
 
 let launching = false;
@@ -1819,7 +1839,10 @@ function onSnapshot(snap) {
     r.quat.set(p.q[0], p.q[1], p.q[2], p.q[3]);
     r.spd = p.spd;
     r.forward.copy(FWD).applyQuaternion(r.quat);
-    r.info = { boost: Boolean(p.b), super: p.su > 0, invuln: Boolean(p.iv), tumble: p.tu, score: p.sc, fx: p.fx || {} };
+    const pTeam = p.tm ? (p.tm === 'b' ? 'blue' : 'red') : ((game.names.get(p.id) || {}).team || null);
+    r.team = pTeam;
+    r.info = { boost: Boolean(p.b), super: p.su > 0, invuln: Boolean(p.iv), tumble: p.tu, score: p.sc, fx: p.fx || {}, team: pTeam };
+    if (pTeam && r.jet) r.jet.setTeam(pTeam);
     r.tumble = p.tu;
     r.lastAt = t;
   }
@@ -2816,7 +2839,9 @@ function updateMissileWarningSystem() {
     // Ignore own rockets
     if (r.owner === game.myId) continue;
     // In Red vs Blue, ignore teammates
-    if (game.mode === 'teams' && r.team && r.team === (game.myTeam === 'blue' ? 'b' : 'r')) continue;
+    const ownerInfo = game.names.get(r.owner) || (remote.get(r.owner) ? remote.get(r.owner).info : null);
+    const ownerTeam = (r.team ? (r.team === 'b' ? 'blue' : r.team === 'r' ? 'red' : r.team) : null) || (ownerInfo ? ownerInfo.team : null);
+    if (game.mode === 'teams' && game.myTeam && ownerTeam && ownerTeam === game.myTeam) continue;
     // In Boss Raid, ignore ally/wingmen rockets (only boss missiles are threats)
     if (game.mode === 'boss' && r.owner !== 'boss') continue;
 
@@ -2919,7 +2944,8 @@ function findTargetAtScreenCoords(screenX, screenY) {
   for (const [id, r] of remote) {
     if (id === game.myId) continue;
     // In Red vs Blue, ignore teammates
-    if (game.mode === 'teams' && game.myTeam && r.info && r.info.team && r.info.team === game.myTeam) continue;
+    const rTeam = (r.info && r.info.team) || r.team || (game.names.get(id) || {}).team || null;
+    if (game.mode === 'teams' && game.myTeam && rTeam && rTeam === game.myTeam) continue;
     // In Boss raid, players and wingmen are allies
     if (game.mode === 'boss') continue;
 

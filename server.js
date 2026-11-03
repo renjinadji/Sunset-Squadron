@@ -32,6 +32,8 @@ const {
   computeCreditPayout,
   randomBalloonPos,
   generateLayout,
+  resolveTeamMatch,
+  isFriendlyFire,
 } = require('./server/logic');
 const { PILOTS, POWERUPS, POWERUP_TYPES, PILOT_IDS, pilotById, perkMultipliers } = PILOT_DATA;
 const { MAPS, MAP_METADATA, mapById } = MAP_DATA;
@@ -218,7 +220,7 @@ const state = {
   phase: 'lobby',               // lobby | playing | ended
   seed: (Math.random() * 0x7fffffff) >>> 0,
   layout: null,
-  settings: { mode: 'crown', preset: 'sunset', bots: 2, map: 'archipelago' },
+  settings: { mode: 'crown', preset: 'sunset', bots: 2, map: 'archipelago', teamFormat: '2v2' },
   hostId: null,
   players: new Map(),           // id -> player (humans and bots)
   joinOrder: [],
@@ -324,12 +326,20 @@ function bots() { return [...state.players.values()].filter((p) => p.isBot); }
 /** Put a pilot on the smaller team (Red wins ties so Red/blue alternate for even joins). */
 function assignTeam(p) {
   if (state.settings.mode !== 'teams') { p.team = null; return p.team; }
+  const teamFormat = state.settings.teamFormat || '2v2';
+  const teamSize = teamFormat === '1v1' ? 1 : 2;
   let red = 0, blue = 0;
   for (const q of state.players.values()) {
     if (q.id === p.id || !q.team) continue;
     if (q.team === 'red') red++; else blue++;
   }
-  p.team = red <= blue ? 'red' : 'blue';
+  if (red < teamSize && (red <= blue || blue >= teamSize)) {
+    p.team = 'red';
+  } else if (blue < teamSize) {
+    p.team = 'blue';
+  } else {
+    p.team = red <= blue ? 'red' : 'blue';
+  }
   return p.team;
 }
 
@@ -490,7 +500,7 @@ function collectPickup(k, p, t) {
     // Drop an armed proximity mine behind your jet
     const dir = forwardFromYP(p.yaw, p.pitch);
     const dropPos = vsub(p.pos, vscale(dir, 10));
-    const mine = { id: state.mineSeq++, owner: p.id, team: p.team || null, p: dropPos, born: t, armAt: t + 1.0, alive: true };
+    const mine = { id: state.mineSeq++, owner: p.id, team: p.team || (state.settings.mode === 'teams' ? assignTeam(p) : null), p: dropPos, born: t, armAt: t + 1.0, alive: true };
     state.mines.push(mine);
     io.emit('mineDrop', { id: mine.id, owner: mine.owner, p: [r2(mine.p.x), r2(mine.p.y), r2(mine.p.z)] });
   } else if (k.type === 'decoy') {
@@ -501,6 +511,7 @@ function collectPickup(k, p, t) {
       id: state.decoySeq++,
       owner: p.id,
       pilot: p.pilot,
+      team: p.team || (state.settings.mode === 'teams' ? assignTeam(p) : null),
       p: spawnPos,
       dir,
       quat: { ...p.quat },
@@ -943,10 +954,17 @@ function startRound() {
   state.weather = generateWeather(state.seed);
   // Remove previous bots, add new ones
   for (const b of bots()) state.players.delete(b.id);
+  const activeHumans = humans();
+  let numBots = state.settings.bots;
+  let teamMatch = null;
+  if (state.settings.mode === 'teams') {
+    teamMatch = resolveTeamMatch(state.settings.teamFormat || '2v2', activeHumans);
+    numBots = teamMatch.neededBots;
+  }
   // Bots get random pilots, preferring ones no human picked so the sky stays colourful
-  const takenPilots = new Set(humans().map((h) => h.pilot));
+  const takenPilots = new Set(activeHumans.map((h) => h.pilot));
   let pool = PILOT_IDS.filter((id) => !takenPilots.has(id));
-  for (let i = 0; i < state.settings.bots; i++) {
+  for (let i = 0; i < numBots; i++) {
     if (!pool.length) pool = [...PILOT_IDS];
     const pilot = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
     const id = `bot-${i + 1}`;
@@ -956,8 +974,30 @@ function startRound() {
   }
   const all = [...state.players.values()];
   if (state.settings.mode === 'teams') {
-    // Red vs Blue: alternate humans by join order, then balance bots onto the smaller team
-    for (const p of all) assignTeam(p);
+    // Red vs Blue: assign active humans according to teamMatch (strictly 1v1 or 2v2)
+    const teamSize = teamMatch.teamSize;
+    for (const p of all) p.team = null;
+
+    for (const h of teamMatch.redHumans) {
+      const p = state.players.get(h.id);
+      if (p) p.team = 'red';
+    }
+    for (const h of teamMatch.blueHumans) {
+      const p = state.players.get(h.id);
+      if (p) p.team = 'blue';
+    }
+    // Balance AI bots into teams up to teamSize
+    for (const b of bots()) {
+      const redCount = [...state.players.values()].filter((p) => p.team === 'red').length;
+      const blueCount = [...state.players.values()].filter((p) => p.team === 'blue').length;
+      if (redCount < teamSize && (redCount <= blueCount || blueCount >= teamSize)) {
+        b.team = 'red';
+      } else if (blueCount < teamSize) {
+        b.team = 'blue';
+      } else {
+        b.team = redCount <= blueCount ? 'red' : 'blue';
+      }
+    }
     const reds = all.filter((p) => p.team === 'red');
     const blues = all.filter((p) => p.team === 'blue');
     reds.forEach((p, i) => spawnTeamPlayer(p));
@@ -1248,10 +1288,37 @@ io.on('connection', (socket) => {
     updateHost();
     const midRound = state.phase === 'playing';
     if (midRound) {
-      // Drop-in mid-round (Red vs Blue: balance them onto a team and spawn with it)
-      assignTeam(player);
-      if (player.team) spawnTeamPlayer(player);
-      else spawnPlayer(player, state.players.size - 1, state.players.size);
+      if (state.settings.mode === 'teams') {
+        const teamFormat = state.settings.teamFormat || '2v2';
+        const teamSize = teamFormat === '1v1' ? 1 : 2;
+        const targetTotal = teamFormat === '1v1' ? 2 : 4;
+        const activeBots = bots();
+        const activeHumans = humans().filter((h) => h.id !== player.id && !h.gone);
+
+        if (activeHumans.length < targetTotal && activeBots.length > 0) {
+          // Replace an existing bot to keep exact 1v1 or 2v2 sizing
+          const redHumans = activeHumans.filter((h) => h.team === 'red').length;
+          const blueHumans = activeHumans.filter((h) => h.team === 'blue').length;
+          const desiredTeam = (redHumans < teamSize && (redHumans <= blueHumans || blueHumans >= teamSize)) ? 'red' : 'blue';
+
+          let replacedBot = activeBots.find((b) => b.team === desiredTeam) || activeBots[0];
+          player.team = replacedBot.team || desiredTeam;
+          state.players.delete(replacedBot.id);
+          spawnTeamPlayer(player);
+          console.log(`[teams] ${player.name} joined ${player.team} mid-round, replacing ${replacedBot.name}`);
+        } else if (activeHumans.length < targetTotal) {
+          assignTeam(player);
+          if (player.team) spawnTeamPlayer(player);
+        } else {
+          // Squad full for 1v1 / 2v2 format
+          player.team = null;
+        }
+      } else {
+        // Drop-in mid-round
+        assignTeam(player);
+        if (player.team) spawnTeamPlayer(player);
+        else spawnPlayer(player, state.players.size - 1, state.players.size);
+      }
     }
     if (typeof ack === 'function') ack({ ok: true, id: socket.id, lobby: lobbyPayload() });
     if (midRound) socket.emit('roundStart', roundStartPayload());
@@ -1413,6 +1480,7 @@ io.on('connection', (socket) => {
     let changedPreset = false;
     let changedMap = false;
     if (MODES.includes(data.mode)) state.settings.mode = data.mode;
+    if (['1v1', '2v2'].includes(data.teamFormat)) state.settings.teamFormat = data.teamFormat;
     if (PRESETS.includes(data.preset) && data.preset !== state.settings.preset) { state.settings.preset = data.preset; changedPreset = true; }
     if (MAPS.includes(data.map) && data.map !== state.settings.map) {
       state.settings.map = data.map;
@@ -1504,6 +1572,8 @@ function tryFire(p, radarTargetId = null, radarTargetKind = null) {
   let isRadar = false;
   let tpos = null;
 
+  const shooterTeam = p.team || (state.settings.mode === 'teams' ? assignTeam(p) : null);
+
   // Radar guided missile lock-on
   if (radarTargetId) {
     if (radarTargetKind === 'boss' || radarTargetId === 'boss') {
@@ -1520,7 +1590,8 @@ function tryFire(p, radarTargetId = null, radarTargetKind = null) {
       }
     } else {
       const tp = state.players.get(radarTargetId);
-      const isTeammate = p.team && tp && tp.team && p.team === tp.team;
+      const targetTeam = tp ? (tp.team || (state.settings.mode === 'teams' ? assignTeam(tp) : null)) : null;
+      const isTeammate = state.settings.mode === 'teams' && shooterTeam && targetTeam && shooterTeam === targetTeam;
       const isBossAlly = state.settings.mode === 'boss' && p.id !== 'boss';
       if (tp && !tp.gone && tp.id !== p.id && !isTeammate && !isBossAlly && !hasFx(tp, 'ghost', t)) {
         tpos = tp.pos;
@@ -1557,7 +1628,7 @@ function tryFire(p, radarTargetId = null, radarTargetKind = null) {
   const rocket = {
     id: state.rocketSeq++,
     owner: p.id,
-    team: p.team || null,
+    team: shooterTeam || null,
     p: start,
     d: dir,
     born: t,
@@ -1644,6 +1715,7 @@ function findHomingTarget(r, t) {
   let best = null;
   let bestAng = HOMING_CONE;
   const owner = state.players.get(r.owner);
+  const shooterTeam = r.team || (owner ? owner.team : null);
   const range = HOMING_RANGE * (owner ? owner.perk.homingRange : 1);
   const consider = (pos, id, kind) => {
     const to = vsub(pos, r.p);
@@ -1654,13 +1726,16 @@ function findHomingTarget(r, t) {
   };
   for (const p of state.players.values()) {
     if (p.id === r.owner) continue;
-    if (p.team && r.team && p.team === r.team) continue;   // Red vs Blue: no friendly fire
+    if (state.settings.mode === 'teams' && shooterTeam && p.team && shooterTeam === p.team) continue; // Red vs Blue: no friendly fire
     if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no friendly fire against pilots/wingmen
     if (hasFx(p, 'ghost', t)) continue;   // Ghost: invisible to homing
     consider(p.pos, p.id, 'player');
   }
   for (const dec of state.decoys) {
     if (dec.owner === r.owner) continue;
+    const decOwner = state.players.get(dec.owner);
+    const decTeam = dec.team || (decOwner ? decOwner.team : null);
+    if (state.settings.mode === 'teams' && shooterTeam && decTeam && shooterTeam === decTeam) continue;
     if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: ally decoys are for the boss, not allies
     consider(dec.p, dec.id, 'decoy');
   }
@@ -1701,6 +1776,10 @@ function stepRockets(dt, t) {
       else if (r.targetKind === 'boss') { if (state.boss && state.boss.alive) curD = dist(state.boss.pos, r.p); }
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
+        const shooterTeam = r.team || (owner ? owner.team : null);
+        const decOwner = state.players.get(dec.owner);
+        const decTeam = dec.team || (decOwner ? decOwner.team : null);
+        if (state.settings.mode === 'teams' && shooterTeam && decTeam && shooterTeam === decTeam) continue;
         if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: player rockets don't retarget to ally decoys
         const dd = dist(dec.p, r.p);
         if (dd < curD) {
@@ -1745,7 +1824,9 @@ function stepRockets(dt, t) {
     // Player hits / deflections
     for (const p of state.players.values()) {
       if (p.id === r.owner) continue;
-      if (p.team && r.team && p.team === r.team) continue;   // Red vs Blue: no friendly fire
+      const shooter = state.players.get(r.owner);
+      const shooterTeam = r.team || (shooter ? shooter.team : null);
+      if (state.settings.mode === 'teams' && shooterTeam && p.team && shooterTeam === p.team) continue; // Red vs Blue: no friendly fire
       if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no friendly fire between pilots/wingmen
       const d = dist(p.pos, r.p);
       if (d < 16 && t < p.rollingUntil && !r.deflected) {
@@ -1813,7 +1894,9 @@ function stepRockets(dt, t) {
     if (!dead) {
       for (const p of state.players.values()) {
         if (p.id === r.owner || p.gone || r.awarded[p.id]) continue;
-        if (p.team && r.team && p.team === r.team) continue;   // no style credit off teammates' rockets
+        const shooter = state.players.get(r.owner);
+        const shooterTeam = r.team || (shooter ? shooter.team : null);
+        if (state.settings.mode === 'teams' && shooterTeam && p.team && shooterTeam === p.team) continue; // no style credit off teammates' rockets
         if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: no close call off ally rockets
         if (dist(p.pos, r.p) < STYLE_CLOSE_CALL_R
           && t - p.lastCloseCallAt >= STYLE_CLOSE_CALL_THROTTLE_S) {
@@ -1827,6 +1910,11 @@ function stepRockets(dt, t) {
     if (!dead) {
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
+        const shooter = state.players.get(r.owner);
+        const shooterTeam = r.team || (shooter ? shooter.team : null);
+        const decOwner = state.players.get(dec.owner);
+        const decTeam = dec.team || (decOwner ? decOwner.team : null);
+        if (state.settings.mode === 'teams' && shooterTeam && decTeam && shooterTeam === decTeam) continue;
         if (state.settings.mode === 'boss' && r.owner !== 'boss') continue; // Boss Raid: player rockets pass through ally decoys
         if (dist(dec.p, r.p) < 12) {
           dead = true;
@@ -1891,7 +1979,9 @@ function stepMines(dt, t) {
       }
       if (!dead) for (const p of state.players.values()) {
         if (p.id === m.owner || p.gone) continue;
-        if (p.team && m.team && p.team === m.team) continue;   // Red vs Blue: no friendly fire
+        const miner = state.players.get(m.owner);
+        const minerTeam = m.team || (miner ? miner.team : null);
+        if (state.settings.mode === 'teams' && minerTeam && p.team && minerTeam === p.team) continue; // Red vs Blue: no friendly fire
         if (state.settings.mode === 'boss' && m.owner !== 'boss') continue; // Boss Raid: no friendly fire on ally mines
         const d = dist(m.p, p.pos);
         if (d < 14 && t >= p.invulnUntil && !(t < p.rollingUntil)) {
@@ -3139,6 +3229,9 @@ function stepBot(p, dt, t) {
   for (const m of state.mines) {
     if (t < m.armAt) continue;
     if (mode === 'boss' && m.owner !== 'boss') continue; // friendly mine, no need to swerve away
+    const miner = state.players.get(m.owner);
+    const minerTeam = m.team || (miner ? miner.team : null);
+    if (mode === 'teams' && minerTeam && p.team && minerTeam === p.team) continue; // friendly mine in Red vs Blue
     const md = dist(m.p, p.pos);
     if (md < 60) {
       const away = vnorm(vsub(p.pos, m.p));

@@ -639,6 +639,59 @@ function generateLayout(seed, map = 'archipelago') {
   return generateArchipelagoLayout(rand, seed);
 }
 
+// ---------------------------------------------------------------------------
+// Red vs Blue Match Sizing & Friendly-Fire Rules
+// ---------------------------------------------------------------------------
+/**
+ * Red vs Blue match sizing rules:
+ * Mode is strictly 1v1 (2 pilots total: 1 Red vs 1 Blue) or 2v2 (4 pilots total: 2 Red vs 2 Blue).
+ * Computes exact pilot capacity, needed AI wingmen bot fill, and balances humans/bots across teams.
+ */
+function resolveTeamMatch(teamFormat = '2v2', humanPilots = []) {
+  const format = teamFormat === '1v1' ? '1v1' : '2v2';
+  const targetTotal = format === '1v1' ? 2 : 4;
+  const teamSize = format === '1v1' ? 1 : 2;
+  const humans = Array.isArray(humanPilots) ? humanPilots : [];
+  const activeHumans = humans.slice(0, targetTotal);
+  const neededBots = Math.max(0, targetTotal - activeHumans.length);
+
+  // Balanced team assignment: alternate active humans between Red and Blue up to teamSize
+  const red = [];
+  const blue = [];
+  for (const h of activeHumans) {
+    if (red.length < teamSize && (red.length <= blue.length || blue.length >= teamSize)) {
+      red.push(h);
+    } else if (blue.length < teamSize) {
+      blue.push(h);
+    }
+  }
+
+  return {
+    format,
+    targetTotal,
+    teamSize,
+    activeHumans,
+    neededBots,
+    redHumans: red,
+    blueHumans: blue,
+  };
+}
+
+/**
+ * Evaluates whether an attack between two entities is considered friendly fire and should be nullified.
+ * In Red vs Blue (mode === 'teams'), players on the same team (red vs red, blue vs blue) cannot damage each other.
+ * In Boss Raid (mode === 'boss'), players and wingmen allies cannot attack each other (only against boss).
+ */
+function isFriendlyFire(mode, attackerTeam, victimTeam, attackerId, victimId) {
+  if (attackerId && victimId && attackerId === victimId) return true;
+  if (mode === 'teams') {
+    if (attackerTeam && victimTeam && attackerTeam === victimTeam) return true;
+  } else if (mode === 'boss') {
+    if (attackerId !== 'boss' && victimId !== 'boss') return true;
+  }
+  return false;
+}
+
 module.exports = {
   mulberry32,
   quatFromYPR, forwardFromYP, wrapAngle,
@@ -658,4 +711,6 @@ module.exports = {
   isRaceComplete, areHumanRacersFinished,
   assessRocketThreat,
   computeCreditPayout,
+  resolveTeamMatch,
+  isFriendlyFire,
 };
