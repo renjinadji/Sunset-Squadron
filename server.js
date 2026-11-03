@@ -1050,10 +1050,10 @@ function startRound() {
       orbitAngle: 0,
       altitude: 135,
       altitudePhase: 0,
-      lastFlakAt: 0,
-      lastMissileAt: 1.5,
-      lastTurretAt: 2.0,
-      lastRingAt: 0,
+      lastFlakAt: now(),
+      lastMissileAt: now(),
+      lastTurretAt: now(),
+      lastRingAt: now(),
       turretIdx: 0,
       damageMap: {},
       flakSeq: 1,
@@ -1776,7 +1776,8 @@ function stepRockets(dt, t) {
       else if (r.targetKind === 'boss') { if (state.boss && state.boss.alive) curD = dist(state.boss.pos, r.p); }
       for (const dec of state.decoys) {
         if (dec.owner === r.owner) continue;
-        const shooterTeam = r.team || (owner ? owner.team : null);
+        const shooter = state.players.get(r.owner);
+        const shooterTeam = r.team || (shooter ? shooter.team : null);
         const decOwner = state.players.get(dec.owner);
         const decTeam = dec.team || (decOwner ? decOwner.team : null);
         if (state.settings.mode === 'teams' && shooterTeam && decTeam && shooterTeam === decTeam) continue;

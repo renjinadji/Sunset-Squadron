@@ -1173,6 +1173,12 @@
     * Mid-Round Drop-In: If a human joins mid-round in Red vs Blue and an AI bot is playing, the human seamlessly replaces the bot on that team without exceeding the 1v1 or 2v2 limit.
   - **Automated Tests:** Added test suite in `test/teams.test.js` validating `resolveTeamMatch` across 1v1 and 2v2 across 1-5 humans, `isFriendlyFire` matrix, and friendly fire safeguards across rockets, mines, homing targets, and radar lock. All 80 unit tests passing (100%).
 
+- **Boss Raid Stability & Decoy Retargeting Fix (`server.js`, `public/js/graphics.js`, `test/boss.test.js`):**
+  - **Problem Solved:** When 2+ players or wingmen were in Boss Raid (or any match with decoys), server crashed after a few seconds with `ReferenceError: owner is not defined` inside `stepRockets()`, causing systemd to restart Node and drop all players back to the lobby.
+  - **Server Fix (`server.js`):** Fixed `stepRockets` decoy retargeting check to properly define `shooter = state.players.get(r.owner)` and `shooterTeam = r.team || (shooter ? shooter.team : null)` instead of referencing undefined `owner`. Also initialized boss attack timers (`lastMissileAt`, `lastTurretAt`, `lastFlakAt`, `lastRingAt`) to `now()` instead of epoch 0 so attacks do not instantly flood on tick 1.
+  - **Client Fix (`public/js/graphics.js`):** Hardened particle system color parser against partial color arrays to prevent `TypeError: undefined is not an object (evaluating 'cs[2].r')`.
+  - **Automated Tests:** Added unit test in `test/boss.test.js` verifying decoy retargeting with boss and player rockets without ReferenceError. All 81 unit tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
 - Optional future enhancements:

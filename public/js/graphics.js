@@ -213,10 +213,13 @@ export class ParticleSystem {
     this.drag[i] = o.drag === undefined ? 1.5 : o.drag;
     this.gravity[i] = o.gravity || 0;
     const cs = o.colors || [C_SPAWN, C_MID, C_END];
+    const c0 = cs[0] || C_SPAWN;
+    const c1 = cs[1] || c0 || C_MID;
+    const c2 = cs[2] || c1 || C_END;
     const glow = o.glow || 1;
-    this.colA[i * 3] = cs[0].r * glow; this.colA[i * 3 + 1] = cs[0].g * glow; this.colA[i * 3 + 2] = cs[0].b * glow;
-    this.colB[i * 3] = cs[1].r; this.colB[i * 3 + 1] = cs[1].g; this.colB[i * 3 + 2] = cs[1].b;
-    this.colC[i * 3] = cs[2].r; this.colC[i * 3 + 1] = cs[2].g; this.colC[i * 3 + 2] = cs[2].b;
+    this.colA[i * 3] = c0.r * glow; this.colA[i * 3 + 1] = c0.g * glow; this.colA[i * 3 + 2] = c0.b * glow;
+    this.colB[i * 3] = c1.r; this.colB[i * 3 + 1] = c1.g; this.colB[i * 3 + 2] = c1.b;
+    this.colC[i * 3] = c2.r; this.colC[i * 3 + 1] = c2.g; this.colC[i * 3 + 2] = c2.b;
   }
 
   burst(center, count, speed, opts = {}) {

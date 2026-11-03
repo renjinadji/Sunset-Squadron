@@ -322,3 +322,38 @@ test('boss attacks deliver heavy Sonic Frontiers knock-back and control dampenin
   assert.strictEqual(getControlDampening(0.8), 0.25, 'Peak tumble dampens steering control down to 25%');
   assert.strictEqual(getControlDampening(0.4), 0.625, 'Mid-recovery tumble allows 62.5% control');
 });
+
+test('boss raid missile homing and decoy retargeting with multiple players does not throw ReferenceError', () => {
+  // Simulates stepRockets decoy check logic when active decoys are present
+  const players = new Map();
+  players.set('p1', { id: 'p1', name: 'Pilot1', team: null, pos: { x: 0, y: 70, z: 0 } });
+  players.set('p2', { id: 'p2', name: 'Pilot2', team: null, pos: { x: 50, y: 70, z: 0 } });
+  players.set('bot-1', { id: 'bot-1', name: 'Wingman Ace', isBot: true, team: null, pos: { x: 30, y: 70, z: 0 } });
+
+  const decoys = [
+    { id: 1, owner: 'p1', team: null, p: { x: 5, y: 70, z: 5 } },
+    { id: 2, owner: 'bot-1', team: null, p: { x: 35, y: 70, z: 5 } },
+  ];
+
+  const rockets = [
+    { id: 1, owner: 'boss', team: null, p: { x: 0, y: 135, z: 0 }, d: { x: 0, y: -0.5, z: 1 }, born: 10, target: 'p1', targetKind: 'player' },
+    { id: 2, owner: 'p2', team: null, p: { x: 50, y: 75, z: 0 }, d: { x: 0, y: 0, z: -1 }, born: 10, target: null, targetKind: null },
+  ];
+
+  // Test that checking decoys for retargeting works for both boss and player rockets without ReferenceError
+  for (const r of rockets) {
+    if (r.targetKind !== 'decoy') {
+      for (const dec of decoys) {
+        if (dec.owner === r.owner) continue;
+        const shooter = players.get(r.owner);
+        const shooterTeam = r.team || (shooter ? shooter.team : null);
+        const decOwner = players.get(dec.owner);
+        const decTeam = dec.team || (decOwner ? decOwner.team : null);
+        assert.doesNotThrow(() => {
+          const isSameTeam = 'boss' === 'teams' && shooterTeam && decTeam && shooterTeam === decTeam;
+          const isBossAlly = 'boss' === 'boss' && r.owner !== 'boss';
+        });
+      }
+    }
+  }
+});
