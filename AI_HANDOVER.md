@@ -1179,10 +1179,27 @@
   - **Client Fix (`public/js/graphics.js`):** Hardened particle system color parser against partial color arrays to prevent `TypeError: undefined is not an object (evaluating 'cs[2].r')`.
   - **Automated Tests:** Added unit test in `test/boss.test.js` verifying decoy retargeting with boss and player rockets without ReferenceError. All 81 unit tests passing (100%).
 
+- **Multi-Boss Boss Raid System - Mega Zeppelin, Giant UFO, and Sky Dragon (`shared/bosses.js`, `server.js`, `public/js/entities.js`, `public/js/main.js`, `public/index.html`, `test/boss.test.js`):**
+  - **4 Selectable Procedural Boss Encounters in Boss Raid Mode:**
+    1. **Sky Dreadnought (`dreadnought`):** Heavy armored flying fortress titan (800 HP + 250/pilot) with dual flak turrets, seeker swarm missile sponsons, ventral plasma reactor core (weak point), and Phase 2 Cyberspace Overdrive.
+    2. **The Mega Zeppelin (`zeppelin`):** Colossal multi-bay ironclad war airship (950 HP + 280/pilot) with 4 propulsion gondolas, spinning dual 4-blade brass propellers, Underside Commander Observation Gondola & boiler furnace (weak point), underside carpet bomb cluster bays, broadside rotary cannon batteries, twin dorsal flak turrets, and industrial black coal/ember smoke clouds.
+    3. **Giant UFO / Alien Mothership (`ufo`):** Extraterrestrial apex aerostat saucer (750 HP + 240/pilot) with dual counter-rotating outer & inner anti-gravity rings, 8 glowing neon photon node emitters, translucent bioluminescent biocrystal command dome, ventral antimatter reactor core (weak point), high-speed emerald/cyan plasma disc salvos, multi-ring radial gravity pulse waves (16 radial projectiles), and Phase 2 Hyperdrive Overload.
+    4. **The Sky Dragon / Tempest Sovereign (`dragon`):** Legendary winged serpent wyvern (850 HP + 260/pilot) with articulated 8-segment serpentine spine chain with realistic sinusoidal undulation kinematics, pair of colossal flapping draconic wings with articulated bone struts and leather membrane sails, horned dragon skull with glowing amber eyes and fiery throat maw (weak point), fireball salvos, flame breath ring bursts, and Phase 2 Inferno Rage.
+  - **Lobby Host Boss Selector:**
+    - In host settings, when Mode is set to "Boss Raid", `#boss-setting` is displayed with interactive `#boss-toggle` buttons (`[ Sky Dreadnought ] [ Mega Zeppelin ] [ Giant UFO ] [ Sky Dragon ]`).
+    - Real-time synchronization via `setSettings` -> `bossType`.
+    - Served `/js/bosses-data.js` as an ES module via `BOSS_DATA.toEsModuleSource()`.
+  - **Procedural 3D Mesh & Animation Architecture (`public/js/entities.js`):**
+    - 100% Three.js procedural geometries with zero external downloads or asset dependencies.
+    - Added `ZeppelinBoss`, `UfoBoss`, `DragonBoss`, and `createBossMesh(type)` factory.
+    - Dynamic boss-specific projectile styling in `BossBullet` (tracer slugs, heavy artillery flak, glowing plasma orbs, dragonfire breath).
+    - Dynamic HUD headers, phase announcements, victory banners, and hit tracking for each individual boss type.
+  - **Automated Tests:** Added 4 new test suites in `test/boss.test.js` verifying boss catalog metadata, HP scaling per pilot count across all 4 boss types, collision and core weak-point radii, Phase 2 Overdrive speed transitions, and projectile cadence. All 85 unit tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, Sky Dreadnought Boss Raid) and 4 procedural maps are fully operational.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 Boss Raid titan encounters) across 4 procedural maps are fully operational.
 - Optional future enhancements:
-  * Additional party sponsor modifiers or boss raid variants.
+  * Additional party sponsor modifiers or extra weapon loadouts.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
 
 ### Notes / Warnings

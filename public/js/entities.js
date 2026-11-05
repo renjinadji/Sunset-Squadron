@@ -3082,6 +3082,7 @@ export class Blimp {
 // ===========================================================================
 export class DreadnoughtBoss {
   constructor() {
+    this.bossType = 'dreadnought';
     this.group = new THREE.Group();
     this.disposables = [];
 
@@ -3408,17 +3409,1035 @@ export class DreadnoughtBoss {
 }
 
 // ===========================================================================
+// ZeppelinBoss (The Mega Zeppelin // Ironclad Leviathan)
+// 100% Procedural Colossal Multi-Bay Armored War Airship
+// ===========================================================================
+export class ZeppelinBoss {
+  constructor() {
+    this.bossType = 'zeppelin';
+    this.group = new THREE.Group();
+    this.disposables = [];
+
+    this.ironMat = new THREE.MeshStandardMaterial({
+      color: 0x22262c,
+      roughness: 0.5,
+      metalness: 0.8,
+      flatShading: true,
+    });
+    this.plateMat = new THREE.MeshStandardMaterial({
+      color: 0x6e583b,
+      roughness: 0.45,
+      metalness: 0.7,
+      flatShading: true,
+    });
+    this.brassMat = new THREE.MeshStandardMaterial({
+      color: 0xcca03a,
+      roughness: 0.25,
+      metalness: 0.9,
+    });
+    this.windowMat = new THREE.MeshStandardMaterial({
+      color: 0xffaa22,
+      emissive: 0xffaa22,
+      emissiveIntensity: 3.0,
+    });
+    this.boilerMat = new THREE.MeshStandardMaterial({
+      color: 0xff4400,
+      emissive: 0xff3300,
+      emissiveIntensity: 3.5,
+    });
+    this.turretMat = new THREE.MeshStandardMaterial({
+      color: 0x14161a,
+      roughness: 0.3,
+      metalness: 0.88,
+    });
+
+    this.disposables.push(this.ironMat, this.plateMat, this.brassMat, this.windowMat, this.boilerMat, this.turretMat);
+
+    // 1. Colossal Armored Rigid Gas Envelope
+    const mainHull = new THREE.Mesh(geo('zepMainHull', () => {
+      const g = new THREE.CylinderGeometry(14, 14, 52, 14);
+      g.rotateX(Math.PI / 2);
+      return g;
+    }), this.ironMat);
+    mainHull.castShadow = true;
+    this.group.add(mainHull);
+
+    // Armored nose cone & brass ram cap
+    const nose = new THREE.Mesh(geo('zepNose', () => {
+      const g = new THREE.ConeGeometry(14, 20, 14);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), this.plateMat);
+    nose.position.set(0, 0, -36);
+    const noseCap = new THREE.Mesh(geo('zepNoseCap', () => new THREE.SphereGeometry(4.5, 8, 8)), this.brassMat);
+    noseCap.position.set(0, 0, -46);
+    this.group.add(nose, noseCap);
+
+    // Tapering stern & empennage rudders
+    const stern = new THREE.Mesh(geo('zepStern', () => {
+      const g = new THREE.ConeGeometry(14, 24, 14);
+      g.rotateX(Math.PI / 2);
+      return g;
+    }), this.plateMat);
+    stern.position.set(0, 0, 38);
+    this.group.add(stern);
+
+    // Cross tail fins (vertical & horizontal stabilizers)
+    const finV = new THREE.Mesh(geo('zepFinV', () => new THREE.BoxGeometry(1.6, 26, 16)), this.ironMat);
+    finV.position.set(0, 0, 42);
+    const finH = new THREE.Mesh(geo('zepFinH', () => new THREE.BoxGeometry(26, 1.6, 16)), this.ironMat);
+    finH.position.set(0, 0, 42);
+    this.group.add(finV, finH);
+
+    // Armored rib girders around envelope
+    for (let z = -20; z <= 20; z += 10) {
+      const ring = new THREE.Mesh(geo('zepHullRing', () => new THREE.TorusGeometry(14.3, 0.45, 6, 18)), this.brassMat);
+      ring.position.set(0, 0, z);
+      this.group.add(ring);
+    }
+
+    // 2. Underside Commander Observation Gondola (Weak-point)
+    this.gondola = new THREE.Group();
+    this.gondola.position.set(0, -15.5, -8);
+    const gondolaBody = new THREE.Mesh(geo('zepGondolaBody', () => new THREE.BoxGeometry(7, 4.5, 22)), this.ironMat);
+    const gondolaProw = new THREE.Mesh(geo('zepGondolaProw', () => {
+      const g = new THREE.ConeGeometry(3.6, 6, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }), this.plateMat);
+    gondolaProw.position.set(0, 0, -14);
+    const bridgeWindows = new THREE.Mesh(geo('zepBridgeWin', () => new THREE.BoxGeometry(6.6, 1.4, 14)), this.windowMat);
+    bridgeWindows.position.set(0, -0.6, -2);
+    // Ventral boiler core furnace
+    this.furnace = new THREE.Mesh(geo('zepFurnace', () => new THREE.SphereGeometry(3.0, 10, 8)), this.boilerMat);
+    this.furnace.position.set(0, -2.4, 4);
+    this.gondola.add(gondolaBody, gondolaProw, bridgeWindows, this.furnace);
+    this.group.add(this.gondola);
+
+    // 3. Four Heavy Propulsion Gondolas with Brass Propellers & Smokestacks
+    this.propellers = [];
+    this.exhaustPipes = [];
+    const engineGeo = geo('zepEnginePod', () => {
+      const g = new THREE.CylinderGeometry(3.2, 3.2, 10, 10);
+      g.rotateX(Math.PI / 2);
+      return g;
+    });
+    const propBladeGeo = geo('zepPropBlade', () => new THREE.BoxGeometry(0.5, 6.4, 0.15));
+
+    const engineOffsets = [
+      [-16, -6, -10],
+      [16, -6, -10],
+      [-18, -4, 16],
+      [18, -4, 16],
+    ];
+
+    for (const [ex, ey, ez] of engineOffsets) {
+      const strut = new THREE.Mesh(geo('zepStrut', () => new THREE.BoxGeometry(4.5, 1.2, 3.5)), this.ironMat);
+      strut.position.set(ex * 0.5, ey + 3, ez);
+      const pod = new THREE.Mesh(engineGeo, this.plateMat);
+      pod.position.set(ex, ey, ez);
+
+      // Spinning propeller
+      const propGroup = new THREE.Group();
+      propGroup.position.set(ex, ey, ez + 5.5);
+      const propHub = new THREE.Mesh(geo('zepPropHub', () => new THREE.SphereGeometry(1.0, 6, 6)), this.brassMat);
+      propGroup.add(propHub);
+      for (let ang = 0; ang < Math.PI * 2; ang += Math.PI / 2) {
+        const blade = new THREE.Mesh(propBladeGeo, this.brassMat);
+        blade.rotation.z = ang;
+        propGroup.add(blade);
+      }
+      this.propellers.push(propGroup);
+
+      // Smoke exhaust funnel
+      const funnel = new THREE.Mesh(geo('zepFunnel', () => {
+        const g = new THREE.CylinderGeometry(0.8, 0.6, 3.2, 6);
+        g.rotateZ(ex > 0 ? 0.3 : -0.3);
+        return g;
+      }), this.turretMat);
+      funnel.position.set(ex, ey + 2.8, ez - 1.5);
+      this.exhaustPipes.push(funnel);
+
+      this.group.add(strut, pod, propGroup, funnel);
+    }
+
+    // 4. Dorsal Flak Turrets & Broadside Cannon Batteries
+    this.turrets = [];
+    const turretBaseGeo = geo('zepTurretBase', () => new THREE.CylinderGeometry(2.5, 3.0, 1.4, 8));
+    const barrelGeo = geo('zepBarrel', () => {
+      const g = new THREE.CylinderGeometry(0.38, 0.42, 6.5, 6);
+      g.rotateX(-Math.PI / 2);
+      return g;
+    });
+
+    for (const [tz, ty] of [[-14, 14.5], [14, 14.5]]) {
+      const tGroup = new THREE.Group();
+      tGroup.position.set(0, ty, tz);
+      const base = new THREE.Mesh(turretBaseGeo, this.turretMat);
+      const bL = new THREE.Mesh(barrelGeo, this.turretMat);
+      bL.position.set(-0.9, 0.7, -3.0);
+      const bR = new THREE.Mesh(barrelGeo, this.turretMat);
+      bR.position.set(0.9, 0.7, -3.0);
+      tGroup.add(base, bL, bR);
+      this.turrets.push(tGroup);
+      this.group.add(tGroup);
+    }
+
+    // Port & Starboard broadside cannon ports
+    for (const sx of [-14.5, 14.5]) {
+      for (const bz of [-8, 0, 8]) {
+        const port = new THREE.Mesh(geo('zepCannonPort', () => new THREE.BoxGeometry(0.8, 1.6, 2.4)), this.brassMat);
+        port.position.set(sx, -2, bz);
+        const muzzle = new THREE.Mesh(geo('zepCannonMuzzle', () => {
+          const g = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 6);
+          g.rotateZ(Math.PI / 2);
+          return g;
+        }), this.turretMat);
+        muzzle.position.set(sx > 0 ? 1.2 : -1.2, 0, 0);
+        port.add(muzzle);
+        this.group.add(port);
+      }
+    }
+
+    this.hitTimer = 0;
+    this.smokeTimer = 0;
+    this.phase = 1;
+    this.enraged = false;
+    this.destroyed = false;
+    this.alive = true;
+    this.turretFlash = [0, 0];
+    this.bombFlash = 0;
+  }
+
+  setPosition(x, y, z) {
+    this.group.position.set(x, y, z);
+  }
+
+  setRotation(yaw) {
+    this.group.rotation.y = yaw;
+  }
+
+  fireTurret(idx) {
+    if (idx >= 0 && idx < 2) {
+      this.turretFlash[idx] = 0.2;
+    }
+  }
+
+  fireMissiles() {
+    this.bombFlash = 0.35;
+  }
+
+  flashHit() {
+    this.hitTimer = 0.14;
+    this.ironMat.emissive.setHex(0xff3344);
+    this.ironMat.emissiveIntensity = 2.4;
+  }
+
+  setPhase(phase) {
+    this.phase = phase;
+    if (phase === 2) {
+      this.enraged = true;
+      this.boilerMat.color.setHex(0xff1100);
+      this.boilerMat.emissive.setHex(0xff1100);
+      this.boilerMat.emissiveIntensity = 4.8;
+      this.windowMat.emissive.setHex(0xff4400);
+    }
+  }
+
+  update(dt, t, particles) {
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) {
+        this.ironMat.emissive.setHex(0x000000);
+        this.ironMat.emissiveIntensity = 0;
+      }
+    }
+
+    // Propellers spin
+    const propSpd = this.enraged ? 35 : 20;
+    for (const p of this.propellers) {
+      p.rotation.z += dt * propSpd;
+    }
+
+    // Furnace boiler pulse
+    const boilerFreq = this.enraged ? 14 : 7;
+    const boilerPulse = this.enraged ? 1.8 : 0.9;
+    this.boilerMat.emissiveIntensity = 3.0 + Math.sin(t * boilerFreq) * boilerPulse;
+
+    // Turret scanning
+    if (this.turrets[0]) this.turrets[0].rotation.y = Math.sin(t * 1.5) * 0.5;
+    if (this.turrets[1]) this.turrets[1].rotation.y = Math.sin(t * 1.2 + 1.0) * 0.5;
+
+    // Turret muzzle flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.turretFlash[i] > 0) {
+        this.turretFlash[i] -= dt;
+        if (particles && Math.random() < 0.65) {
+          const tz = i === 0 ? -14 : 14;
+          const mPos = new THREE.Vector3(0, 15.5, tz - 4).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: mPos,
+            vel: { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 6, z: (Math.random() - 0.5) * 8 },
+            life: 0.18,
+            size: 2.4,
+            drag: 0.6,
+            colors: [new THREE.Color(0xffbb00), new THREE.Color(0xff4400)],
+            glow: 3.5,
+          });
+        }
+      }
+    }
+
+    // Bomb bay drop flash
+    if (this.bombFlash > 0) {
+      this.bombFlash -= dt;
+      if (particles && Math.random() < 0.75) {
+        const bPos = new THREE.Vector3(0, -16, 2).applyQuaternion(this.group.quaternion).add(this.group.position);
+        particles.spawn({
+          pos: bPos,
+          vel: { x: (Math.random() - 0.5) * 8, y: -8 - Math.random() * 8, z: (Math.random() - 0.5) * 8 },
+          life: 0.4,
+          size: 3.0,
+          drag: 0.8,
+          colors: [new THREE.Color(0xff5500), new THREE.Color(0x222222)],
+          glow: 2.8,
+        });
+      }
+    }
+
+    // Industrial smoke and coal sparks from 4 engine exhaust funnels
+    this.smokeTimer -= dt;
+    if (particles && this.smokeTimer <= 0) {
+      this.smokeTimer = this.enraged ? 0.035 : 0.07;
+      const smokeCols = this.enraged
+        ? [new THREE.Color(0xff4400), new THREE.Color(0x221100), new THREE.Color(0x110c14)]
+        : [new THREE.Color(0x333338), new THREE.Color(0x181a1f), new THREE.Color(0x665544)];
+
+      const enginePositions = [
+        [-16, -3, -11.5],
+        [16, -3, -11.5],
+        [-18, -1, 14.5],
+        [18, -1, 14.5],
+      ];
+      for (const [ex, ey, ez] of enginePositions) {
+        const back = new THREE.Vector3(ex, ey, ez).applyQuaternion(this.group.quaternion).add(this.group.position);
+        particles.spawn({
+          pos: back,
+          vel: { x: (Math.random() - 0.5) * 4, y: 5 + Math.random() * 5, z: (Math.random() - 0.5) * 4 },
+          life: this.enraged ? 1.5 : 1.1,
+          size: this.enraged ? 2.5 : 1.9,
+          drag: 0.9,
+          colors: smokeCols,
+          glow: this.enraged ? 2.6 : 1.0,
+        });
+      }
+    }
+  }
+
+  destroy(particles) {
+    this.alive = false;
+    this.destroyed = true;
+    if (particles) {
+      const p = this.group.position;
+      const fireCols = [new THREE.Color(0xffd54a), new THREE.Color(0xff5e5b), new THREE.Color(0xff9a2a)];
+      for (let i = 0; i < 8; i++) {
+        const off = new THREE.Vector3((Math.random() - 0.5) * 36, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 50);
+        particles.fireworkBurst(p.clone().add(off), 45, 20, 'fw_saturn', { colors: fireCols, life: 1.8, size: 3.2 });
+      }
+    }
+  }
+
+  dispose() {
+    for (const d of this.disposables) if (d && d.dispose) d.dispose();
+  }
+}
+
+// ===========================================================================
+// UfoBoss (Giant UFO // Extraterrestrial Aerostat)
+// 100% Procedural Alien Mothership with Counter-Rotating Anti-Grav Rings
+// ===========================================================================
+export class UfoBoss {
+  constructor() {
+    this.bossType = 'ufo';
+    this.group = new THREE.Group();
+    this.disposables = [];
+
+    this.hullMat = new THREE.MeshStandardMaterial({
+      color: 0x181c24,
+      roughness: 0.25,
+      metalness: 0.92,
+      flatShading: true,
+    });
+    this.ringMat = new THREE.MeshStandardMaterial({
+      color: 0x0c0f16,
+      roughness: 0.2,
+      metalness: 0.95,
+    });
+    this.neonMat = new THREE.MeshStandardMaterial({
+      color: 0x00f0ff,
+      emissive: 0x00f0ff,
+      emissiveIntensity: 3.6,
+      roughness: 0.1,
+    });
+    this.domeMat = new THREE.MeshStandardMaterial({
+      color: 0xb026ff,
+      emissive: 0x8a00e6,
+      emissiveIntensity: 2.8,
+      roughness: 0.1,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.88,
+    });
+    this.coreMat = new THREE.MeshStandardMaterial({
+      color: 0x39ff14,
+      emissive: 0x39ff14,
+      emissiveIntensity: 4.2,
+      roughness: 0.1,
+    });
+
+    this.disposables.push(this.hullMat, this.ringMat, this.neonMat, this.domeMat, this.coreMat);
+
+    // 1. Central Bi-Conical Saucer Hull
+    const upperSaucer = new THREE.Mesh(geo('ufoUpperSaucer', () => {
+      const g = new THREE.CylinderGeometry(14, 25, 4.5, 20);
+      return g;
+    }), this.hullMat);
+    upperSaucer.position.set(0, 1.2, 0);
+    upperSaucer.castShadow = true;
+
+    const lowerSaucer = new THREE.Mesh(geo('ufoLowerSaucer', () => {
+      const g = new THREE.CylinderGeometry(25, 12, 4.5, 20);
+      return g;
+    }), this.hullMat);
+    lowerSaucer.position.set(0, -2.5, 0);
+    this.group.add(upperSaucer, lowerSaucer);
+
+    // 2. Central Bio-Crystal Command Dome
+    const dome = new THREE.Mesh(geo('ufoDome', () => {
+      const g = new THREE.SphereGeometry(9, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+      return g;
+    }), this.domeMat);
+    dome.position.set(0, 3.4, 0);
+    this.group.add(dome);
+
+    // 3. Counter-Rotating Outer & Inner Anti-Gravity Energy Rings
+    this.outerRing = new THREE.Group();
+    const outerTorus = new THREE.Mesh(geo('ufoOuterTorus', () => new THREE.TorusGeometry(29, 1.8, 8, 28)), this.ringMat);
+    outerTorus.rotation.x = Math.PI / 2;
+    this.outerRing.add(outerTorus);
+
+    // 8 Neon Photon Node Emitters along outer ring
+    this.nodeEmitters = [];
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const nx = Math.cos(ang) * 29;
+      const nz = Math.sin(ang) * 29;
+      const node = new THREE.Mesh(geo('ufoNode', () => new THREE.SphereGeometry(1.4, 8, 8)), this.neonMat);
+      node.position.set(nx, 0, nz);
+      this.outerRing.add(node);
+      this.nodeEmitters.push(node);
+    }
+    this.group.add(this.outerRing);
+
+    this.innerRing = new THREE.Group();
+    const innerTorus = new THREE.Mesh(geo('ufoInnerTorus', () => new THREE.TorusGeometry(18, 1.2, 8, 22)), this.ringMat);
+    innerTorus.rotation.x = Math.PI / 2;
+    this.innerRing.add(innerTorus);
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2;
+      const nx = Math.cos(ang) * 18;
+      const nz = Math.sin(ang) * 18;
+      const subNode = new THREE.Mesh(geo('ufoSubNode', () => new THREE.BoxGeometry(1.2, 1.8, 1.2)), this.neonMat);
+      subNode.position.set(nx, 0, nz);
+      this.innerRing.add(subNode);
+    }
+    this.group.add(this.innerRing);
+
+    // 4. Ventral Antimatter Reactor Core / Tractor Emitter (Weak-point)
+    this.coreGroup = new THREE.Group();
+    this.coreGroup.position.set(0, -5.2, 0);
+    const coreSphere = new THREE.Mesh(geo('ufoCoreSphere', () => new THREE.SphereGeometry(4.2, 14, 10)), this.coreMat);
+    this.ring1 = new THREE.Mesh(geo('ufoCoreRing1', () => new THREE.TorusGeometry(5.8, 0.4, 6, 20)), this.neonMat);
+    this.ring1.rotation.x = Math.PI / 2;
+    this.ring2 = new THREE.Mesh(geo('ufoCoreRing2', () => new THREE.TorusGeometry(7.2, 0.35, 6, 20)), this.neonMat);
+    this.ring2.rotation.x = Math.PI / 2;
+    this.coreGroup.add(coreSphere, this.ring1, this.ring2);
+    this.group.add(this.coreGroup);
+
+    // 5. Peripheral Plasma Emitter Sponsons
+    this.turrets = [];
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const px = Math.cos(ang) * 23;
+      const pz = Math.sin(ang) * 23;
+      const pod = new THREE.Group();
+      pod.position.set(px, -0.6, pz);
+      const podMesh = new THREE.Mesh(geo('ufoPlasmaPod', () => new THREE.SphereGeometry(2.0, 8, 8)), this.hullMat);
+      const nozzle = new THREE.Mesh(geo('ufoPlasmaNozzle', () => new THREE.CylinderGeometry(0.7, 0.5, 2.5, 6)), this.neonMat);
+      nozzle.rotation.x = Math.PI / 2;
+      nozzle.rotation.z = ang;
+      pod.add(podMesh, nozzle);
+      this.turrets.push(pod);
+      this.group.add(pod);
+    }
+
+    this.hitTimer = 0;
+    this.smokeTimer = 0;
+    this.phase = 1;
+    this.enraged = false;
+    this.destroyed = false;
+    this.alive = true;
+    this.turretFlash = [0, 0];
+    this.missileFlash = [0, 0];
+  }
+
+  setPosition(x, y, z) {
+    this.group.position.set(x, y, z);
+  }
+
+  setRotation(yaw) {
+    this.group.rotation.y = yaw;
+  }
+
+  fireTurret(idx) {
+    if (idx >= 0 && idx < 2) {
+      this.turretFlash[idx] = 0.2;
+    }
+  }
+
+  fireMissiles() {
+    this.missileFlash[0] = 0.25;
+    this.missileFlash[1] = 0.25;
+  }
+
+  flashHit() {
+    this.hitTimer = 0.14;
+    this.hullMat.emissive.setHex(0x00ffea);
+    this.hullMat.emissiveIntensity = 2.8;
+  }
+
+  setPhase(phase) {
+    this.phase = phase;
+    if (phase === 2) {
+      this.enraged = true;
+      this.neonMat.color.setHex(0xff00cc);
+      this.neonMat.emissive.setHex(0xff00aa);
+      this.coreMat.color.setHex(0x00ffff);
+      this.coreMat.emissive.setHex(0x00ffff);
+      this.domeMat.emissive.setHex(0xff00aa);
+    }
+  }
+
+  update(dt, t, particles) {
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) {
+        this.hullMat.emissive.setHex(0x000000);
+        this.hullMat.emissiveIntensity = 0;
+      }
+    }
+
+    // Counter-rotating rings
+    const outerSpd = this.enraged ? 6.5 : 3.2;
+    const innerSpd = this.enraged ? 8.0 : 4.0;
+    this.outerRing.rotation.y += dt * outerSpd;
+    this.innerRing.rotation.y -= dt * innerSpd;
+
+    // Antimatter core pulse & magnetic levitation oscillation
+    const pulseFreq = this.enraged ? 16 : 8;
+    const pulseAmt = this.enraged ? 1.8 : 1.0;
+    this.coreMat.emissiveIntensity = 3.6 + Math.sin(t * pulseFreq) * pulseAmt;
+    this.domeMat.emissiveIntensity = 2.4 + Math.sin(t * 4.5) * 0.8;
+    if (this.ring1) this.ring1.rotation.z += dt * 3.5;
+    if (this.ring2) this.ring2.rotation.x += dt * 4.0;
+
+    // Turret plasma flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.turretFlash[i] > 0) {
+        this.turretFlash[i] -= dt;
+        if (particles && Math.random() < 0.7) {
+          const mPos = new THREE.Vector3(0, -2, -24).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: mPos,
+            vel: { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 },
+            life: 0.22,
+            size: 2.5,
+            drag: 0.5,
+            colors: [new THREE.Color(0x39ff14), new THREE.Color(0x00f0ff), new THREE.Color(0xffffff)],
+            glow: 4.0,
+          });
+        }
+      }
+    }
+
+    // Missile / Plasma disc salvo flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.missileFlash[i] > 0) {
+        this.missileFlash[i] -= dt;
+        if (particles && Math.random() < 0.75) {
+          const sPos = new THREE.Vector3(i === 0 ? -22 : 22, -1, 0).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: sPos,
+            vel: { x: (Math.random() - 0.5) * 12, y: 10 + Math.random() * 8, z: (Math.random() - 0.5) * 12 },
+            life: 0.35,
+            size: 2.8,
+            drag: 0.8,
+            colors: [new THREE.Color(0x00f0ff), new THREE.Color(0xb026ff), new THREE.Color(0xffffff)],
+            glow: 3.5,
+          });
+        }
+      }
+    }
+
+    // Ion trail and photon sparks from outer ring nodes
+    this.smokeTimer -= dt;
+    if (particles && this.smokeTimer <= 0) {
+      this.smokeTimer = this.enraged ? 0.04 : 0.08;
+      const ionCols = this.enraged
+        ? [new THREE.Color(0xff00cc), new THREE.Color(0x9400d3), new THREE.Color(0x00ffff)]
+        : [new THREE.Color(0x00f0ff), new THREE.Color(0x39ff14), new THREE.Color(0x7000ff)];
+
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 4) * Math.PI * 2 + this.outerRing.rotation.y;
+        const nx = Math.cos(ang) * 29;
+        const nz = Math.sin(ang) * 29;
+        const nodeWorld = new THREE.Vector3(nx, 0, nz).applyQuaternion(this.group.quaternion).add(this.group.position);
+        particles.spawn({
+          pos: nodeWorld,
+          vel: { x: (Math.random() - 0.5) * 4, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 4 },
+          life: this.enraged ? 1.2 : 0.8,
+          size: this.enraged ? 2.2 : 1.6,
+          drag: 0.9,
+          colors: ionCols,
+          glow: this.enraged ? 3.0 : 2.0,
+        });
+      }
+    }
+  }
+
+  destroy(particles) {
+    this.alive = false;
+    this.destroyed = true;
+    if (particles) {
+      const p = this.group.position;
+      const alienCols = [new THREE.Color(0x00f0ff), new THREE.Color(0x39ff14), new THREE.Color(0xb026ff)];
+      for (let i = 0; i < 7; i++) {
+        const off = new THREE.Vector3((Math.random() - 0.5) * 40, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 40);
+        particles.fireworkBurst(p.clone().add(off), 42, 20, 'fw_saturn', { colors: alienCols, life: 1.8, size: 3.0 });
+      }
+    }
+  }
+
+  dispose() {
+    for (const d of this.disposables) if (d && d.dispose) d.dispose();
+  }
+}
+
+// ===========================================================================
+// DragonBoss (The Sky Dragon // Tempest Sovereign)
+// 100% Procedural Mythical Winged Wyvern with Articulated Serpentine Kinematics
+// ===========================================================================
+export class DragonBoss {
+  constructor() {
+    this.bossType = 'dragon';
+    this.group = new THREE.Group();
+    this.disposables = [];
+
+    this.scaleMat = new THREE.MeshStandardMaterial({
+      color: 0x3d1217,
+      roughness: 0.45,
+      metalness: 0.65,
+      flatShading: true,
+    });
+    this.bellyMat = new THREE.MeshStandardMaterial({
+      color: 0x7a401c,
+      roughness: 0.5,
+      metalness: 0.45,
+      flatShading: true,
+    });
+    this.hornMat = new THREE.MeshStandardMaterial({
+      color: 0x181516,
+      roughness: 0.3,
+      metalness: 0.7,
+    });
+    this.wingMat = new THREE.MeshStandardMaterial({
+      color: 0x821c25,
+      roughness: 0.6,
+      metalness: 0.2,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    this.eyeMat = new THREE.MeshStandardMaterial({
+      color: 0xffaa00,
+      emissive: 0xff8800,
+      emissiveIntensity: 4.0,
+    });
+    this.mawMat = new THREE.MeshStandardMaterial({
+      color: 0xff3300,
+      emissive: 0xff2200,
+      emissiveIntensity: 4.5,
+    });
+
+    this.disposables.push(this.scaleMat, this.bellyMat, this.hornMat, this.wingMat, this.eyeMat, this.mawMat);
+
+    // 1. Draconic Horned Head & Fiery Maw
+    this.head = new THREE.Group();
+    this.head.position.set(0, 1.5, -20);
+
+    const skull = new THREE.Mesh(geo('drgSkull', () => {
+      const g = new THREE.ConeGeometry(3.6, 9, 6);
+      g.rotateX(-Math.PI / 2);
+      g.scale(1.0, 0.7, 1.0);
+      return g;
+    }), this.scaleMat);
+    skull.position.set(0, 0, -4);
+
+    const jaw = new THREE.Mesh(geo('drgJaw', () => {
+      const g = new THREE.BoxGeometry(2.8, 1.2, 7);
+      return g;
+    }), this.bellyMat);
+    jaw.position.set(0, -1.2, -4);
+
+    // Fiery throat maw (Weak-point)
+    this.maw = new THREE.Mesh(geo('drgMawFire', () => new THREE.SphereGeometry(1.6, 8, 8)), this.mawMat);
+    this.maw.position.set(0, -0.4, -4.5);
+
+    // Glowing Eyes
+    const eyeL = new THREE.Mesh(geo('drgEye', () => new THREE.SphereGeometry(0.55, 6, 6)), this.eyeMat);
+    eyeL.position.set(-1.8, 1.1, -3);
+    const eyeR = new THREE.Mesh(geo('drgEye'), this.eyeMat);
+    eyeR.position.set(1.8, 1.1, -3);
+
+    // Cranial Horns
+    const hornL = new THREE.Mesh(geo('drgHorn', () => {
+      const g = new THREE.ConeGeometry(0.8, 7, 5);
+      g.rotateX(Math.PI * 0.7);
+      g.rotateZ(-0.35);
+      return g;
+    }), this.hornMat);
+    hornL.position.set(-1.6, 2.2, 0.5);
+    const hornR = new THREE.Mesh(geo('drgHornR', () => {
+      const g = new THREE.ConeGeometry(0.8, 7, 5);
+      g.rotateX(Math.PI * 0.7);
+      g.rotateZ(0.35);
+      return g;
+    }), this.hornMat);
+    hornR.position.set(1.6, 2.2, 0.5);
+
+    this.head.add(skull, jaw, this.maw, eyeL, eyeR, hornL, hornR);
+    this.group.add(this.head);
+
+    // 2. Articulated Serpentine Spine Chain (Torso & Tail Segments)
+    this.segments = [];
+    const segCount = 8;
+    for (let i = 0; i < segCount; i++) {
+      const segGroup = new THREE.Group();
+      const zOffset = -14 + i * 6.5;
+      segGroup.position.set(0, 0, zOffset);
+
+      const r = Math.max(1.8, 4.6 - i * 0.38);
+      const segMesh = new THREE.Mesh(geo(`drgSeg_${i}`, () => {
+        const g = new THREE.CylinderGeometry(r * 0.85, r, 6.2, 7);
+        g.rotateX(Math.PI / 2);
+        return g;
+      }), this.scaleMat);
+
+      // Belly underplate
+      const belly = new THREE.Mesh(geo(`drgBelly_${i}`, () => new THREE.BoxGeometry(r * 1.3, 0.7, 5.8)), this.bellyMat);
+      belly.position.set(0, -r * 0.8, 0);
+
+      // Dorsal Spine Spikes
+      const spike = new THREE.Mesh(geo(`drgSpike_${i}`, () => {
+        const g = new THREE.ConeGeometry(0.7, 2.8, 4);
+        return g;
+      }), this.hornMat);
+      spike.position.set(0, r + 1.2, 0);
+
+      segGroup.add(segMesh, belly, spike);
+      this.segments.push(segGroup);
+      this.group.add(segGroup);
+    }
+
+    // Bladed Tail Fluke Fin on the last segment
+    const fluke = new THREE.Mesh(geo('drgFluke', () => {
+      const g = new THREE.BoxGeometry(6.5, 0.5, 5);
+      g.scale(1, 0.2, 1);
+      return g;
+    }), this.scaleMat);
+    fluke.position.set(0, 0, 4);
+    this.segments[this.segments.length - 1].add(fluke);
+
+    // 3. Colossal Articulated Draconic Wings
+    this.wingL = new THREE.Group();
+    this.wingR = new THREE.Group();
+    this.wingL.position.set(-3.5, 2.2, -4);
+    this.wingR.position.set(3.5, 2.2, -4);
+
+    // Left & Right Wings: Arm struts and membranous sails
+    const armGeo = geo('drgWingArm', () => {
+      const g = new THREE.CylinderGeometry(0.65, 0.85, 18, 6);
+      g.rotateZ(Math.PI / 2);
+      return g;
+    });
+    const armL = new THREE.Mesh(armGeo, this.hornMat);
+    armL.position.set(-9, 0, 0);
+    const armR = new THREE.Mesh(armGeo, this.hornMat);
+    armR.position.set(9, 0, 0);
+
+    const sailGeoL = geo('drgWingSailL', () => {
+      const g = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        0, 0, 0,
+        -18, 3, 2,
+        -14, -2, 18,
+        0, 0, 0,
+        -14, -2, 18,
+        -5, -1, 10
+      ]);
+      g.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      g.computeVertexNormals();
+      return g;
+    });
+    const sailL = new THREE.Mesh(sailGeoL, this.wingMat);
+
+    const sailGeoR = geo('drgWingSailR', () => {
+      const g = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        0, 0, 0,
+        18, 3, 2,
+        14, -2, 18,
+        0, 0, 0,
+        14, -2, 18,
+        5, -1, 10
+      ]);
+      g.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      g.computeVertexNormals();
+      return g;
+    });
+    const sailR = new THREE.Mesh(sailGeoR, this.wingMat);
+
+    this.wingL.add(armL, sailL);
+    this.wingR.add(armR, sailR);
+    this.group.add(this.wingL, this.wingR);
+
+    this.hitTimer = 0;
+    this.smokeTimer = 0;
+    this.phase = 1;
+    this.enraged = false;
+    this.destroyed = false;
+    this.alive = true;
+    this.turretFlash = [0, 0];
+    this.missileFlash = [0, 0];
+  }
+
+  setPosition(x, y, z) {
+    this.group.position.set(x, y, z);
+  }
+
+  setRotation(yaw) {
+    this.group.rotation.y = yaw;
+  }
+
+  fireTurret(idx) {
+    if (idx >= 0 && idx < 2) {
+      this.turretFlash[idx] = 0.22;
+    }
+  }
+
+  fireMissiles() {
+    this.missileFlash[0] = 0.3;
+    this.missileFlash[1] = 0.3;
+  }
+
+  flashHit() {
+    this.hitTimer = 0.14;
+    this.scaleMat.emissive.setHex(0xffaa22);
+    this.scaleMat.emissiveIntensity = 2.6;
+  }
+
+  setPhase(phase) {
+    this.phase = phase;
+    if (phase === 2) {
+      this.enraged = true;
+      this.scaleMat.color.setHex(0x5a1818);
+      this.scaleMat.emissive.setHex(0x881100);
+      this.scaleMat.emissiveIntensity = 1.8;
+      this.mawMat.emissive.setHex(0xff1100);
+      this.eyeMat.color.setHex(0xffffff);
+      this.eyeMat.emissive.setHex(0xffffff);
+    }
+  }
+
+  update(dt, t, particles) {
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) {
+        this.scaleMat.emissive.setHex(this.enraged ? 0x881100 : 0x000000);
+        this.scaleMat.emissiveIntensity = this.enraged ? 1.8 : 0;
+      }
+    }
+
+    // Realistic sinusoidal wing flapping
+    const flapSpeed = this.enraged ? 9.5 : 6.0;
+    const flapAng = Math.sin(t * flapSpeed);
+    this.wingL.rotation.z = flapAng * 0.45;
+    this.wingR.rotation.z = -flapAng * 0.45;
+    this.wingL.rotation.y = Math.cos(t * flapSpeed) * 0.15;
+    this.wingR.rotation.y = -Math.cos(t * flapSpeed) * 0.15;
+
+    // Fluid serpentine undulation along the spinal chain
+    const waveFreq = this.enraged ? 5.5 : 3.8;
+    for (let i = 0; i < this.segments.length; i++) {
+      const seg = this.segments[i];
+      const phase = t * waveFreq - i * 0.65;
+      seg.position.x = Math.sin(phase) * (1.2 + i * 0.45);
+      seg.rotation.y = Math.cos(phase) * 0.22;
+      seg.rotation.x = Math.sin(t * 2.5 - i * 0.35) * 0.08;
+    }
+
+    // Draconic head sway
+    this.head.position.x = Math.sin(t * 3.8 + 0.5) * 1.0;
+    this.head.rotation.y = Math.cos(t * 3.8 + 0.5) * 0.18;
+
+    // Pulsing fiery throat maw
+    const mawFreq = this.enraged ? 16 : 8;
+    this.mawMat.emissiveIntensity = (this.enraged ? 4.8 : 3.5) + Math.sin(t * mawFreq) * 1.2;
+
+    // Fiery breath burst flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.turretFlash[i] > 0) {
+        this.turretFlash[i] -= dt;
+        if (particles && Math.random() < 0.75) {
+          const mPos = new THREE.Vector3(0, 1.0, -26).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: mPos,
+            vel: { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 6, z: -15 - Math.random() * 10 },
+            life: 0.28,
+            size: 2.8,
+            drag: 0.6,
+            colors: [new THREE.Color(0xff4500), new THREE.Color(0xffaa00), new THREE.Color(0xffd54a)],
+            glow: 4.2,
+          });
+        }
+      }
+    }
+
+    // Fireball launch flashes
+    for (let i = 0; i < 2; i++) {
+      if (this.missileFlash[i] > 0) {
+        this.missileFlash[i] -= dt;
+        if (particles && Math.random() < 0.8) {
+          const sPos = new THREE.Vector3(i === 0 ? -4 : 4, 1.2, -22).applyQuaternion(this.group.quaternion).add(this.group.position);
+          particles.spawn({
+            pos: sPos,
+            vel: { x: (Math.random() - 0.5) * 10, y: 12 + Math.random() * 8, z: (Math.random() - 0.5) * 10 },
+            life: 0.38,
+            size: 3.2,
+            drag: 0.8,
+            colors: [new THREE.Color(0xff3300), new THREE.Color(0xff8800), new THREE.Color(0xfff000)],
+            glow: 3.8,
+          });
+        }
+      }
+    }
+
+    // Draconic smoke and fiery ember breath trailing behind
+    this.smokeTimer -= dt;
+    if (particles && this.smokeTimer <= 0) {
+      this.smokeTimer = this.enraged ? 0.035 : 0.07;
+      const emberCols = this.enraged
+        ? [new THREE.Color(0xff2200), new THREE.Color(0xff6600), new THREE.Color(0x220500)]
+        : [new THREE.Color(0xff4500), new THREE.Color(0xff9900), new THREE.Color(0x331100)];
+
+      // Nostrils & maw smoke
+      const mouthPos = new THREE.Vector3(0, 1.0, -25).applyQuaternion(this.group.quaternion).add(this.group.position);
+      particles.spawn({
+        pos: mouthPos,
+        vel: { x: (Math.random() - 0.5) * 3, y: (Math.random() - 0.5) * 2, z: 4 + Math.random() * 4 },
+        life: this.enraged ? 1.4 : 1.0,
+        size: this.enraged ? 2.4 : 1.7,
+        drag: 0.9,
+        colors: emberCols,
+        glow: this.enraged ? 3.0 : 1.5,
+      });
+
+      // Tail sparks
+      if (this.segments.length > 0) {
+        const tailSeg = this.segments[this.segments.length - 1];
+        const tailPos = tailSeg.position.clone().applyQuaternion(this.group.quaternion).add(this.group.position);
+        particles.spawn({
+          pos: tailPos,
+          vel: { x: (Math.random() - 0.5) * 4, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 4 },
+          life: 0.8,
+          size: 1.5,
+          drag: 0.8,
+          colors: emberCols,
+          glow: 2.0,
+        });
+      }
+    }
+  }
+
+  destroy(particles) {
+    this.alive = false;
+    this.destroyed = true;
+    if (particles) {
+      const p = this.group.position;
+      const fireCols = [new THREE.Color(0xff4500), new THREE.Color(0xff9900), new THREE.Color(0xffea00)];
+      for (let i = 0; i < 8; i++) {
+        const off = new THREE.Vector3((Math.random() - 0.5) * 34, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 45);
+        particles.fireworkBurst(p.clone().add(off), 45, 22, 'fw_saturn', { colors: fireCols, life: 1.8, size: 3.2 });
+      }
+    }
+  }
+
+  dispose() {
+    for (const d of this.disposables) if (d && d.dispose) d.dispose();
+  }
+}
+
+// Boss Mesh Factory
+export function createBossMesh(type) {
+  switch (type) {
+    case 'zeppelin':
+      return new ZeppelinBoss();
+    case 'ufo':
+      return new UfoBoss();
+    case 'dragon':
+      return new DragonBoss();
+    case 'dreadnought':
+    default:
+      return new DreadnoughtBoss();
+  }
+}
+
+// ===========================================================================
 // BossBullet (Tracer Slugs & Cyberspace Energy Rings)
 // ===========================================================================
 export class BossBullet {
-  constructor(isRing = false) {
+  constructor(isRing = false, kind = 'dreadnought') {
     this.group = new THREE.Group();
     this.isRing = isRing;
+    this.kind = kind;
 
     if (isRing) {
+      let ringCol = 0x00f0ff;
+      let partCols = [new THREE.Color(0x00f0ff), new THREE.Color(0x7000ff), new THREE.Color(0xff00aa)];
+      if (kind === 'ufo') {
+        ringCol = 0x39ff14;
+        partCols = [new THREE.Color(0x39ff14), new THREE.Color(0x00f0ff), new THREE.Color(0x00ffcc)];
+      } else if (kind === 'dragon') {
+        ringCol = 0xff4500;
+        partCols = [new THREE.Color(0xff3300), new THREE.Color(0xffaa00), new THREE.Color(0xffea00)];
+      } else if (kind === 'zeppelin') {
+        ringCol = 0xffaa22;
+        partCols = [new THREE.Color(0xff9900), new THREE.Color(0xff4400), new THREE.Color(0x333333)];
+      }
+
       this.mat = new THREE.MeshStandardMaterial({
-        color: 0x00f0ff,
-        emissive: 0x00f0ff,
+        color: ringCol,
+        emissive: ringCol,
         emissiveIntensity: 3.8,
         roughness: 0.1,
         metalness: 0.9,
@@ -3428,11 +4447,24 @@ export class BossBullet {
       const ringMesh = new THREE.Mesh(ringGeo, this.mat);
       const coreMesh = new THREE.Mesh(coreGeo, this.mat);
       this.group.add(ringMesh, coreMesh);
-      this.colors = [new THREE.Color(0x00f0ff), new THREE.Color(0x7000ff), new THREE.Color(0xff00aa)];
+      this.colors = partCols;
     } else {
+      let bulletCol = 0xff3300;
+      let partCols = [new THREE.Color(0xff4400), new THREE.Color(0xffbb00), new THREE.Color(0xffffff)];
+      if (kind === 'ufo') {
+        bulletCol = 0x00ffcc;
+        partCols = [new THREE.Color(0x00ffcc), new THREE.Color(0x39ff14), new THREE.Color(0xffffff)];
+      } else if (kind === 'dragon') {
+        bulletCol = 0xff4500;
+        partCols = [new THREE.Color(0xff3300), new THREE.Color(0xff7700), new THREE.Color(0xffd54a)];
+      } else if (kind === 'zeppelin') {
+        bulletCol = 0xffaa00;
+        partCols = [new THREE.Color(0xffaa00), new THREE.Color(0xff5500), new THREE.Color(0x444444)];
+      }
+
       this.mat = new THREE.MeshStandardMaterial({
-        color: 0xff3300,
-        emissive: 0xff4400,
+        color: bulletCol,
+        emissive: bulletCol,
         emissiveIntensity: 4.0,
         roughness: 0.2,
       });
@@ -3443,7 +4475,7 @@ export class BossBullet {
       });
       const slugMesh = new THREE.Mesh(slugGeo, this.mat);
       this.group.add(slugMesh);
-      this.colors = [new THREE.Color(0xff4400), new THREE.Color(0xffbb00), new THREE.Color(0xffffff)];
+      this.colors = partCols;
     }
 
     this.trailTimer = 0;

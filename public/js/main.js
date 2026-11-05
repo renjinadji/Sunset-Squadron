@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Graphics, ParticleSystem, PRESETS } from './graphics.js';
 import { World, islandCollision, WATER_LEVEL, WORLD_RADIUS, CEILING } from './world.js';
-import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, BossBullet, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
+import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, ZeppelinBoss, UfoBoss, DragonBoss, createBossMesh, BossBullet, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
 import { Controls } from './controls.js';
 import { SoundEngine } from './audio.js';
 import { PILOTS, PERKS, POWERUPS, pilotById, perkMultipliers, hexCss } from './pilots-data.js';
@@ -83,6 +83,7 @@ const ui = {
   btnLaunch: $('btn-launch'), btnStart: $('btn-start'), joinError: $('join-error'), hostWait: $('host-wait'),
   mapToggle: $('map-toggle'), modeToggle: $('mode-toggle'), presetToggle: $('preset-toggle'), botsToggle: $('bots-toggle'),
   botsSetting: $('bots-setting'), teamFormatSetting: $('team-format-setting'), teamFormatToggle: $('team-format-toggle'),
+  bossSetting: $('boss-setting'), bossToggle: $('boss-toggle'),
   lobbyCreditsVal: $('lobby-credits-val'), btnOpenHangar: $('btn-open-hangar'), hangarNewBadge: $('hangar-new-badge'),
   lobbySponsorBanner: $('lobby-sponsor-banner'), lobbySponsorText: $('lobby-sponsor-text'),
   rosterSponsorStrip: $('roster-sponsor-strip'), rosterSponsorDesc: $('roster-sponsor-desc'), btnQuickSponsor: $('btn-quick-sponsor'),
@@ -193,7 +194,18 @@ const mines = new Map();    // id -> { mesh: Mine, pos: Vector3 }
 const decoys = new Map();   // id -> { jet: Jet, pos: Vector3, quat: Quaternion, lastAt: number }
 const meteors = new Map();  // id -> { mesh: Meteor } (Meteor Shower event)
 let blimpMesh = null;            // Boss Blimp event
-let bossMesh = null;             // Sky Dreadnought Boss Raid
+let bossMesh = null;             // Boss Raid encounter (Dreadnought, Zeppelin, UFO, Dragon)
+function spawnBossMesh(bossType) {
+  if (bossMesh) {
+    gfx.scene.remove(bossMesh.group);
+    bossMesh.dispose();
+    bossMesh = null;
+  }
+  bossMesh = createBossMesh(bossType || 'dreadnought');
+  bossMesh.bossType = bossType || 'dreadnought';
+  gfx.scene.add(bossMesh.group);
+  return bossMesh;
+}
 const bossBullets = new Map();   // id -> { mesh: BossBullet, pos, dir, isRing }
 let crown = null;
 let teamCrowns = null;          // Red vs Blue: {red: Crown, blue: Crown}
@@ -540,8 +552,10 @@ function renderRoster(lobby) {
   if (lobby.phase !== 'lobby') { game.rosterEditing = false; ui.rosterPicker.classList.add('hidden'); }
   const humans = lobby.players.filter((p) => !p.isBot).length;
   const isTeams = lobby.settings.mode === 'teams';
+  const isBoss = lobby.settings.mode === 'boss';
   if (ui.botsSetting) ui.botsSetting.classList.toggle('hidden', isTeams);
   if (ui.teamFormatSetting) ui.teamFormatSetting.classList.toggle('hidden', !isTeams);
+  if (ui.bossSetting) ui.bossSetting.classList.toggle('hidden', !isBoss);
 
   if (isTeams) {
     const format = lobby.settings.teamFormat || '2v2';
@@ -551,6 +565,15 @@ function renderRoster(lobby) {
     if (ui.teamFormatToggle) {
       for (const b of ui.teamFormatToggle.children) {
         b.classList.toggle('active', b.dataset.teamFormat === format);
+      }
+    }
+  } else if (isBoss) {
+    const bType = lobby.settings.bossType || 'dreadnought';
+    const bNames = { dreadnought: 'Sky Dreadnought', zeppelin: 'Mega Zeppelin', ufo: 'Giant UFO', dragon: 'Sky Dragon' };
+    ui.rosterCount.textContent = `Boss Raid · ${bNames[bType] || 'Boss'} (${humans} pilot${humans === 1 ? '' : 's'} + ${lobby.settings.bots} wingmen)`;
+    if (ui.bossToggle) {
+      for (const b of ui.bossToggle.children) {
+        b.classList.toggle('active', b.dataset.bossType === bType);
       }
     }
   } else {
@@ -595,6 +618,9 @@ function wireLobby() {
   for (const b of ui.botsToggle.children) b.addEventListener('click', () => setting('bots', Number(b.dataset.bots)));
   if (ui.teamFormatToggle) {
     for (const b of ui.teamFormatToggle.children) b.addEventListener('click', () => setting('teamFormat', b.dataset.teamFormat));
+  }
+  if (ui.bossToggle) {
+    for (const b of ui.bossToggle.children) b.addEventListener('click', () => setting('bossType', b.dataset.bossType));
   }
 }
 
@@ -680,8 +706,9 @@ function connectSocket() {
       }
       if (bossMesh) bossMesh.setPhase(2);
       sound.bossPhaseChange();
-      showBanner('⚠️ BOSS ENRAGED: FLAK BARRAGE & OVERDRIVE ACTIVE!', 4.0);
-      addFeed('⚠️ Dreadnought entering Phase 2: Overdrive engaged!');
+      const bName = data.name || 'BOSS';
+      showBanner(`⚠️ ${bName.toUpperCase()} ENRAGED: OVERDRIVE ACTIVE!`, 4.0);
+      addFeed(`⚠️ ${bName} entering Phase 2: Overdrive engaged!`);
     }
   });
   socket.on('bossDown', (data) => {
@@ -691,8 +718,9 @@ function connectSocket() {
     sound.bossDefeat();
     const killer = game.names.get(data.by);
     const killerName = killer ? killer.name : 'A brave pilot';
-    showBanner(`💥 SKY DREADNOUGHT DESTROYED! (+${data.points} PTS)`, 5.0);
-    addFeed(`💥 Sky Dreadnought brought down by ${killerName}!`);
+    const bName = data.name || 'BOSS';
+    showBanner(`💥 ${bName.toUpperCase()} DESTROYED! (+${data.points} PTS)`, 5.0);
+    addFeed(`💥 ${bName} brought down by ${killerName}!`);
   });
   socket.on('bossTurretFire', (data) => {
     const d = data.p ? distToMe(data.p) : 250;
@@ -1642,14 +1670,14 @@ function startRound(data) {
   // Power-up orbs (both modes)
   for (const k of data.pickups || []) spawnPickupMesh(k);
 
-  // Sky Dreadnought Boss Raid
+  // Boss Raid encounter
   if (data.mode === 'boss' && data.boss) {
-    if (bossMesh) { gfx.scene.remove(bossMesh.group); bossMesh.dispose(); bossMesh = null; }
-    bossMesh = new DreadnoughtBoss();
-    bossMesh.setPosition(0, 135, 0);
-    gfx.scene.add(bossMesh.group);
+    const bType = data.boss.type || 'dreadnought';
+    spawnBossMesh(bType);
+    bossMesh.setPosition(0, data.boss.altitude || 135, 0);
     ui.hudBossBar.classList.remove('hidden');
-    ui.bossTitle.textContent = data.boss.name ? data.boss.name.toUpperCase() + ' // AEGIS TITAN' : 'SKY DREADNOUGHT // AEGIS TITAN';
+    const tag = data.boss.tag || 'TITAN ENCOUNTER';
+    ui.bossTitle.textContent = `${(data.boss.name || 'BOSS').toUpperCase()} // ${tag.toUpperCase()}`;
     ui.bossHpNumbers.textContent = `${data.boss.hp} / ${data.boss.maxHp} HP`;
     ui.bossHpFill.style.width = '100%';
     ui.bossPhaseBadge.textContent = 'PHASE 1';
@@ -1967,13 +1995,16 @@ function onSnapshot(snap) {
       if (typeof snap.ev.yaw === 'number') blimpMesh.setRotation(snap.ev.yaw);
     }
   }
-  // Boss Raid Dreadnought sync
+  // Boss Raid encounter sync
   if (snap.boss) {
-    if (!bossMesh) {
-      bossMesh = new DreadnoughtBoss();
+    const bType = snap.boss.t || 'dreadnought';
+    if (!bossMesh || bossMesh.bossType !== bType) {
+      spawnBossMesh(bType);
       bossMesh.setPosition(snap.boss.p[0], snap.boss.p[1], snap.boss.p[2]);
-      gfx.scene.add(bossMesh.group);
       ui.hudBossBar.classList.remove('hidden');
+      if (snap.boss.name) {
+        ui.bossTitle.textContent = `${snap.boss.name.toUpperCase()} // TITAN ENCOUNTER`;
+      }
     }
     if (snap.boss.p) {
       bossMesh.group.position.set(snap.boss.p[0], snap.boss.p[1], snap.boss.p[2]);
@@ -1995,7 +2026,7 @@ function onSnapshot(snap) {
     seenBb.add(bk.id);
     let b = bossBullets.get(bk.id);
     if (!b) {
-      const mesh = new BossBullet(Boolean(bk.r));
+      const mesh = new BossBullet(Boolean(bk.r), bk.k || (snap.boss ? snap.boss.t : 'dreadnought'));
       mesh.setPosition(bk.p[0], bk.p[1], bk.p[2]);
       if (bk.d) mesh.setDirection(new THREE.Vector3(bk.d[0], bk.d[1], bk.d[2]));
       gfx.scene.add(mesh.group);

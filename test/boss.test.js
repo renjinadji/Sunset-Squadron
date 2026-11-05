@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Leaderboard } = require('../leaderboard');
 const logic = require('../server/logic');
+const BOSS_DATA = require('../shared/bosses');
 
 function tmpBoard() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-boss-'));
@@ -355,5 +356,123 @@ test('boss raid missile homing and decoy retargeting with multiple players does 
         });
       }
     }
+  }
+});
+
+test('shared/bosses catalog defines 4 distinct bosses with rich stats and metadata', () => {
+  assert.strictEqual(BOSS_DATA.BOSS_TYPES.length, 4);
+  assert.deepStrictEqual(BOSS_DATA.BOSS_TYPES, ['dreadnought', 'zeppelin', 'ufo', 'dragon']);
+
+  for (const bType of BOSS_DATA.BOSS_TYPES) {
+    const b = BOSS_DATA.bossById(bType);
+    assert.strictEqual(b.id, bType);
+    assert.ok(typeof b.name === 'string' && b.name.length > 0, `Boss ${bType} has a valid name`);
+    assert.ok(typeof b.title === 'string' && b.title.length > 0, `Boss ${bType} has a valid title`);
+    assert.ok(typeof b.desc === 'string' && b.desc.length > 0, `Boss ${bType} has a valid desc`);
+    assert.ok(b.baseHp >= 700, `Boss ${bType} baseHp >= 700`);
+    assert.ok(b.hpPerPilot >= 200, `Boss ${bType} hpPerPilot >= 200`);
+    assert.ok(b.collisionR >= 30, `Boss ${bType} collisionR >= 30`);
+    assert.ok(b.coreR >= 10 && b.coreR < b.collisionR, `Boss ${bType} coreR is inside collisionR`);
+    assert.ok(b.speedP1 > 10 && b.speedP2 > b.speedP1, `Boss ${bType} speed accelerates in Phase 2`);
+    assert.ok(b.missileIntervalP2 < b.missileIntervalP1, `Boss ${bType} missile cooldown is faster in Phase 2`);
+    assert.ok(b.turretBurstP2 < b.turretBurstP1, `Boss ${bType} turret burst is faster in Phase 2`);
+  }
+
+  // Lookup helper and fallback
+  const zep = BOSS_DATA.bossById('zeppelin');
+  assert.strictEqual(zep.name, 'The Mega Zeppelin');
+  const ufo = BOSS_DATA.bossById('ufo');
+  assert.strictEqual(ufo.name, 'Giant UFO');
+  const dragon = BOSS_DATA.bossById('dragon');
+  assert.strictEqual(dragon.name, 'The Sky Dragon');
+  const fallback = BOSS_DATA.bossById('non_existent');
+  assert.strictEqual(fallback.id, 'dreadnought');
+
+  // ES module export source
+  const src = BOSS_DATA.toEsModuleSource();
+  assert.ok(src.includes('export const BOSS_TYPES = ['), 'Exports BOSS_TYPES');
+  assert.ok(src.includes('export const BOSS_METADATA = {'), 'Exports BOSS_METADATA');
+  assert.ok(src.includes('export function bossById(id)'), 'Exports bossById helper');
+});
+
+test('multi-boss HP scaling per pilot count across Dreadnought, Zeppelin, UFO, and Dragon', () => {
+  const calcHp = (bType, pilotCount) => {
+    const cfg = BOSS_DATA.bossById(bType);
+    return cfg.baseHp + Math.max(0, pilotCount - 1) * cfg.hpPerPilot;
+  };
+
+  // Sky Dreadnought (800 base + 250/pilot)
+  assert.strictEqual(calcHp('dreadnought', 1), 800, 'Dreadnought solo: 800 HP');
+  assert.strictEqual(calcHp('dreadnought', 4), 1550, 'Dreadnought 4 pilots: 1550 HP');
+  assert.strictEqual(calcHp('dreadnought', 8), 2550, 'Dreadnought 8 pilots: 2550 HP');
+
+  // The Mega Zeppelin (950 base + 280/pilot) - colossal armored ironclad airship
+  assert.strictEqual(calcHp('zeppelin', 1), 950, 'Zeppelin solo: 950 HP');
+  assert.strictEqual(calcHp('zeppelin', 2), 1230, 'Zeppelin 2 pilots: 1230 HP');
+  assert.strictEqual(calcHp('zeppelin', 4), 1790, 'Zeppelin 4 pilots: 1790 HP');
+  assert.strictEqual(calcHp('zeppelin', 8), 2910, 'Zeppelin 8 pilots: 2910 HP');
+
+  // Giant UFO (750 base + 240/pilot) - agile shielded mothership
+  assert.strictEqual(calcHp('ufo', 1), 750, 'UFO solo: 750 HP');
+  assert.strictEqual(calcHp('ufo', 2), 990, 'UFO 2 pilots: 990 HP');
+  assert.strictEqual(calcHp('ufo', 4), 1470, 'UFO 4 pilots: 1470 HP');
+  assert.strictEqual(calcHp('ufo', 8), 2430, 'UFO 8 pilots: 2430 HP');
+
+  // The Sky Dragon (850 base + 260/pilot) - ferocious mythical wyvern
+  assert.strictEqual(calcHp('dragon', 1), 850, 'Dragon solo: 850 HP');
+  assert.strictEqual(calcHp('dragon', 2), 1110, 'Dragon 2 pilots: 1110 HP');
+  assert.strictEqual(calcHp('dragon', 4), 1630, 'Dragon 4 pilots: 1630 HP');
+  assert.strictEqual(calcHp('dragon', 8), 2670, 'Dragon 8 pilots: 2670 HP');
+});
+
+test('multi-boss collision hitbox radii and core weak point critical hits', () => {
+  for (const bType of BOSS_DATA.BOSS_TYPES) {
+    const cfg = BOSS_DATA.bossById(bType);
+
+    // Collision check: point inside collisionR
+    const isHullHit = (dist) => dist < cfg.collisionR;
+    assert.strictEqual(isHullHit(cfg.collisionR - 5), true, `${bType} registers hull hit inside collisionR`);
+    assert.strictEqual(isHullHit(cfg.collisionR + 5), false, `${bType} does not hit outside collisionR`);
+
+    // Core weak point: point inside coreR deals critical damage (6 vs 4)
+    const isCritHit = (dist) => dist < cfg.coreR;
+    const calcDamage = (dist) => isCritHit(dist) ? 6 : 4;
+
+    assert.strictEqual(isCritHit(cfg.coreR - 2), true, `${bType} registers critical hit inside coreR`);
+    assert.strictEqual(calcDamage(cfg.coreR - 2), 6, `${bType} critical hit deals 6 damage`);
+
+    assert.strictEqual(isCritHit(cfg.coreR + 4), false, `${bType} outer hit is not critical`);
+    assert.strictEqual(calcDamage(cfg.coreR + 4), 4, `${bType} regular hull hit deals 4 damage`);
+  }
+});
+
+test('multi-boss Phase 2 Overdrive transitions and accelerated flight speeds', () => {
+  for (const bType of BOSS_DATA.BOSS_TYPES) {
+    const cfg = BOSS_DATA.bossById(bType);
+    let hp = cfg.baseHp;
+    let phase = 1;
+    let enraged = false;
+    let currentSpeed = cfg.speedP1;
+
+    function damage(amt) {
+      hp = Math.max(0, hp - amt);
+      if (phase === 1 && hp <= Math.round(cfg.baseHp * 0.5)) {
+        phase = 2;
+        enraged = true;
+        currentSpeed = cfg.speedP2;
+      }
+    }
+
+    // Damage down to 55%
+    damage(cfg.baseHp * 0.45);
+    assert.strictEqual(phase, 1, `${bType} remains in Phase 1 above 50% HP`);
+    assert.strictEqual(enraged, false);
+    assert.strictEqual(currentSpeed, cfg.speedP1);
+
+    // Cross 50% threshold
+    damage(cfg.baseHp * 0.1);
+    assert.strictEqual(phase, 2, `${bType} enters Phase 2 at <= 50% HP`);
+    assert.strictEqual(enraged, true);
+    assert.strictEqual(currentSpeed, cfg.speedP2, `${bType} accelerates to speedP2 (${cfg.speedP2} m/s)`);
   }
 });

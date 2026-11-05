@@ -20,6 +20,7 @@ const QRCode = require('qrcode');
 const PILOT_DATA = require('./shared/pilots');
 const SHOP_DATA = require('./shared/shop');
 const MAP_DATA = require('./shared/maps');
+const BOSS_DATA = require('./shared/bosses');
 const { Leaderboard } = require('./leaderboard');
 const {
   mulberry32, quatFromYPR, forwardFromYP, wrapAngle,
@@ -220,7 +221,7 @@ const state = {
   phase: 'lobby',               // lobby | playing | ended
   seed: (Math.random() * 0x7fffffff) >>> 0,
   layout: null,
-  settings: { mode: 'crown', preset: 'sunset', bots: 2, map: 'archipelago', teamFormat: '2v2' },
+  settings: { mode: 'crown', preset: 'sunset', bots: 2, map: 'archipelago', teamFormat: '2v2', bossType: 'dreadnought' },
   hostId: null,
   players: new Map(),           // id -> player (humans and bots)
   joinOrder: [],
@@ -726,6 +727,10 @@ app.get('/js/maps-data.js', (req, res) => {
   res.type('application/javascript').set('Cache-Control', 'no-cache').send(MAP_DATA.toEsModuleSource());
 });
 
+app.get('/js/bosses-data.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-cache').send(BOSS_DATA.toEsModuleSource());
+});
+
 app.get('/api/shop', (req, res) => {
   res.json({
     categories: SHOP_DATA.SHOP_CATEGORIES,
@@ -923,7 +928,7 @@ function roundStartPayload() {
     ...(state.teamCrowns ? { crowns: { red: { h: state.teamCrowns.red.holderId, pos: state.teamCrowns.red.pos }, blue: { h: state.teamCrowns.blue.holderId, pos: state.teamCrowns.blue.pos } } } : {}),
     pickups: state.pickups.map(pickupPublic),
     course: state.race ? { gates: state.race.course.map((g) => ({ id: g.id, x: r2(g.x), y: r2(g.y), z: r2(g.z), yaw: r3(g.yaw), gateR: g.gateR })), total: state.race.course.length } : null,
-    boss: (state.settings.mode === 'boss' && state.boss) ? { hp: state.boss.hp, maxHp: state.boss.maxHp, name: 'Sky Dreadnought' } : null,
+    boss: (state.settings.mode === 'boss' && state.boss) ? { hp: state.boss.hp, maxHp: state.boss.maxHp, name: state.boss.name, type: state.boss.type, tag: state.boss.tag, altitude: state.boss.altitude } : null,
     activeRoundSponsor: state.roundSponsor || null,
     roundSponsor: state.roundSponsor || null,
     players: [...state.players.values()].map((p) => ({
@@ -1033,23 +1038,41 @@ function startRound() {
   state.race = state.settings.mode === 'race' ? { course: generateCourse(state.seed, state.layout), finishCount: 0 } : null;
   if (state.settings.mode === 'boss') {
     const totalPilots = state.players.size;
-    const maxHp = BOSS_BASE_HP + Math.max(0, totalPilots - 1) * BOSS_HP_PER_PILOT;
+    const bType = state.settings.bossType || 'dreadnought';
+    const cfg = BOSS_DATA.bossById(bType);
+    const maxHp = cfg.baseHp + Math.max(0, totalPilots - 1) * cfg.hpPerPilot;
     state.boss = {
       alive: true,
+      type: cfg.id,
+      name: cfg.name,
+      title: cfg.title,
+      tag: cfg.tag,
       hp: maxHp,
       maxHp: maxHp,
       phase: 1,
       enraged: false,
-      pos: { x: 0, y: 135, z: 0 },
+      pos: { x: 0, y: cfg.altitude, z: 0 },
       dir: { x: 0, y: 0, z: -1 },
       yaw: 0,
       pitch: 0,
       roll: 0,
-      orbitRadius: 280,
-      orbitSpeed: BOSS_SPEED_PHASE1,
+      orbitRadius: cfg.orbitRadius,
+      orbitSpeed: cfg.speedP1,
+      speedP1: cfg.speedP1,
+      speedP2: cfg.speedP2,
       orbitAngle: 0,
-      altitude: 135,
+      altitude: cfg.altitude,
       altitudePhase: 0,
+      collisionR: cfg.collisionR,
+      coreR: cfg.coreR,
+      ramSpeed: cfg.ramSpeed,
+      missileIntervalP1: cfg.missileIntervalP1,
+      missileIntervalP2: cfg.missileIntervalP2,
+      turretBurstP1: cfg.turretBurstP1,
+      turretBurstP2: cfg.turretBurstP2,
+      ringIntervalP2: cfg.ringIntervalP2,
+      flakIntervalP1: cfg.flakIntervalP1,
+      flakIntervalP2: cfg.flakIntervalP2,
       lastFlakAt: now(),
       lastMissileAt: now(),
       lastTurretAt: now(),
@@ -1481,6 +1504,7 @@ io.on('connection', (socket) => {
     let changedMap = false;
     if (MODES.includes(data.mode)) state.settings.mode = data.mode;
     if (['1v1', '2v2'].includes(data.teamFormat)) state.settings.teamFormat = data.teamFormat;
+    if (BOSS_DATA.BOSS_TYPES.includes(data.bossType)) state.settings.bossType = data.bossType;
     if (PRESETS.includes(data.preset) && data.preset !== state.settings.preset) { state.settings.preset = data.preset; changedPreset = true; }
     if (MAPS.includes(data.map) && data.map !== state.settings.map) {
       state.settings.map = data.map;
@@ -1942,10 +1966,12 @@ function stepRockets(dt, t) {
       dead = true;
       damageBlimp(4, r.owner, t, r.p);
     }
-    // Sky Dreadnought: rocket hit deals 4 hp (or 6 hp crit on reactor core) in Boss Raid
-    if (!dead && state.boss && state.boss.alive && dist(state.boss.pos, r.p) < BOSS_COLLISION_R && r.owner !== 'boss') {
+    // Boss: rocket hit deals 4 hp (or 6 hp crit on core weak point) in Boss Raid
+    const bCollR = (state.boss && state.boss.collisionR) ? state.boss.collisionR : BOSS_COLLISION_R;
+    const bCoreR = (state.boss && state.boss.coreR) ? state.boss.coreR : BOSS_CORE_R;
+    if (!dead && state.boss && state.boss.alive && dist(state.boss.pos, r.p) < bCollR && r.owner !== 'boss') {
       dead = true;
-      const isCrit = dist(state.boss.pos, r.p) < BOSS_CORE_R;
+      const isCrit = dist(state.boss.pos, r.p) < bCoreR;
       const dmg = isCrit ? 6 : 4;
       damageBoss(dmg, r.owner, t, r.p, isCrit);
     }
@@ -1973,7 +1999,8 @@ function stepMines(dt, t) {
         damageBlimp(6, m.owner, t, m.p);
         io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
       }
-      if (!dead && state.boss && state.boss.alive && dist(m.p, state.boss.pos) < BOSS_COLLISION_R + 8) {
+      const bMineR = (state.boss && state.boss.collisionR) ? state.boss.collisionR : BOSS_COLLISION_R;
+      if (!dead && state.boss && state.boss.alive && dist(m.p, state.boss.pos) < bMineR + 8) {
         dead = true;
         damageBoss(8, m.owner, t, m.p, true);
         io.emit('boom', { p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] });
@@ -2163,9 +2190,11 @@ function stepGatesAndPickups(t) {
         damageBlimp(3, p.id, t, p.pos);
       }
     }
-    // Sky Dreadnought hull collision & ramming (deals 5 damage to boss at speed, repels jet with massive knockback)
+    // Boss hull collision & ramming (deals 5 damage to boss at speed, repels jet with massive knockback)
     const boss = state.boss;
-    if (boss && boss.alive && dist(boss.pos, p.pos) < reach(p, BOSS_COLLISION_R, t)) {
+    const bCollR = (boss && boss.collisionR) ? boss.collisionR : BOSS_COLLISION_R;
+    const bRamSpeed = (boss && boss.ramSpeed) ? boss.ramSpeed : BOSS_RAM_SPEED;
+    if (boss && boss.alive && dist(boss.pos, p.pos) < reach(p, bCollR, t)) {
       if (t - (p.lastBossRamAt || 0) >= 0.8) {
         p.lastBossRamAt = t;
         const away = vnorm({
@@ -2177,7 +2206,7 @@ function stepGatesAndPickups(t) {
         applyKnockback(p, kbVec);
         p.tumbleUntil = t + Math.max(0.8, TUMBLE_TIME * 1.35) * p.perk.tumble;
 
-        if (p.speed > BOSS_RAM_SPEED) {
+        if (p.speed > bRamSpeed) {
           damageBoss(5, p.id, t, p.pos, false);
         }
 
@@ -2481,9 +2510,9 @@ function damageBoss(amount, byId, t, hitPos, isCrit) {
   if (boss.phase === 1 && boss.hp <= Math.round(boss.maxHp * 0.5)) {
     boss.phase = 2;
     boss.enraged = true;
-    boss.orbitSpeed = BOSS_SPEED_PHASE2;
-    io.emit('bossPhase', { phase: 2, hp: boss.hp, maxHp: boss.maxHp });
-    console.log(`[boss] Sky Dreadnought entered Phase 2 (Overdrive)! HP=${boss.hp}/${boss.maxHp}`);
+    boss.orbitSpeed = boss.speedP2 || BOSS_SPEED_PHASE2;
+    io.emit('bossPhase', { phase: 2, hp: boss.hp, maxHp: boss.maxHp, name: boss.name, type: boss.type });
+    console.log(`[boss] ${boss.name} entered Phase 2 (Overdrive)! HP=${boss.hp}/${boss.maxHp}`);
   }
 
   if (boss.hp <= 0) {
@@ -2510,8 +2539,8 @@ function killBoss(killerId, t) {
     }
   }
   const pos = [r2(boss.pos.x), r2(boss.pos.y), r2(boss.pos.z)];
-  io.emit('bossDown', { by: killerId, points: Math.round(pts), p: pos });
-  console.log(`[boss] Sky Dreadnought downed by ${killer ? killer.name : killerId}!`);
+  io.emit('bossDown', { by: killerId, points: Math.round(pts), p: pos, name: boss.name, type: boss.type });
+  console.log(`[boss] ${boss.name} downed by ${killer ? killer.name : killerId}!`);
   spawnPickupShower(boss.pos);
   setTimeout(() => {
     if (state.phase === 'playing') endRound();
@@ -2549,8 +2578,8 @@ function stepBossRaid(dt, t) {
   }
   targets.sort((a, b) => a.dist - b.dist);
 
-  // 1. MISSILE SALVOS (Sonic Frontiers Seeker Swarm)
-  const missileInterval = boss.phase === 2 ? BOSS_MISSILE_INTERVAL_P2 : BOSS_MISSILE_INTERVAL_P1;
+  // 1. MISSILE SALVOS (Seeker Swarms / Fireballs / Plasma Discs / Carpet Bombs)
+  const missileInterval = boss.phase === 2 ? (boss.missileIntervalP2 || BOSS_MISSILE_INTERVAL_P2) : (boss.missileIntervalP1 || BOSS_MISSILE_INTERVAL_P1);
   if (t - boss.lastMissileAt >= missileInterval && targets.length > 0) {
     boss.lastMissileAt = t;
     const count = boss.phase === 2 ? Math.min(4, Math.max(2, targets.length)) : Math.min(2, targets.length);
@@ -2562,14 +2591,14 @@ function stepBossRaid(dt, t) {
       const perpX = -dirZ * side;
       const perpZ = dirX * side;
       const launchPos = {
-        x: boss.pos.x + perpX * 16,
-        y: boss.pos.y + 3.5,
-        z: boss.pos.z + perpZ * 16,
+        x: boss.pos.x + perpX * (boss.type === 'ufo' ? 22 : 16),
+        y: boss.pos.y + (boss.type === 'zeppelin' ? -12 : 3.5),
+        z: boss.pos.z + perpZ * (boss.type === 'ufo' ? 22 : 16),
       };
       // Upward arcing launch vector with side flare
       const launchDir = vnorm({
         x: perpX * 0.55 + dirX * 0.25,
-        y: 0.72 + Math.random() * 0.22,
+        y: (boss.type === 'zeppelin' ? -0.3 : 0.72) + Math.random() * 0.22,
         z: perpZ * 0.55 + dirZ * 0.25,
       });
 
@@ -2599,8 +2628,8 @@ function stepBossRaid(dt, t) {
     });
   }
 
-  // 2. AUTOCANNON TRACER BULLETS (Rapid-Fire Turrets)
-  const turretInterval = boss.phase === 2 ? BOSS_TURRET_BURST_P2 : BOSS_TURRET_BURST_P1;
+  // 2. AUTOCANNON / ROTARY / BREATH TRACER BULLETS
+  const turretInterval = boss.phase === 2 ? (boss.turretBurstP2 || BOSS_TURRET_BURST_P2) : (boss.turretBurstP1 || BOSS_TURRET_BURST_P1);
   if (t - boss.lastTurretAt >= turretInterval && targets.length > 0) {
     boss.lastTurretAt = t;
     boss.turretIdx = (boss.turretIdx + 1) % 2;
@@ -2636,6 +2665,7 @@ function stepBossRaid(dt, t) {
         v: vscale(bulletDir, BOSS_BULLET_SPEED),
         born: t + bIdx * 0.04,
         isRing: false,
+        kind: boss.type,
         awarded: {},
       });
     }
@@ -2648,11 +2678,12 @@ function stepBossRaid(dt, t) {
     });
   }
 
-  // 3. PHASE 2 CYBERSPACE BULLET HELL RADIAL RING
+  // 3. PHASE 2 BULLET HELL RADIAL RING
   if (boss.phase === 2) {
-    if (t - boss.lastRingAt >= BOSS_RING_INTERVAL_P2) {
+    const ringInterval = boss.ringIntervalP2 || BOSS_RING_INTERVAL_P2;
+    if (t - boss.lastRingAt >= ringInterval) {
       boss.lastRingAt = t;
-      const ringProjectiles = 12;
+      const ringProjectiles = boss.type === 'ufo' ? 16 : 12;
       const ringElevations = [-0.12, 0, 0.12];
 
       for (let rIdx = 0; rIdx < ringProjectiles; rIdx++) {
@@ -2669,6 +2700,7 @@ function stepBossRaid(dt, t) {
           v: vscale(rDir, 48),
           born: t,
           isRing: true,
+          kind: boss.type,
           awarded: {},
         });
       }
@@ -2680,7 +2712,7 @@ function stepBossRaid(dt, t) {
   }
 
   // 4. DEFENSIVE FLAK & AFT MINES
-  const flakInterval = boss.phase === 2 ? BOSS_FLAK_INTERVAL_P2 : BOSS_FLAK_INTERVAL_P1;
+  const flakInterval = boss.phase === 2 ? (boss.flakIntervalP2 || BOSS_FLAK_INTERVAL_P2) : (boss.flakIntervalP1 || BOSS_FLAK_INTERVAL_P1);
   if (t - boss.lastFlakAt >= flakInterval) {
     boss.lastFlakAt = t;
     if (targets.length > 0) {
@@ -3382,6 +3414,8 @@ function snapshot(t) {
         ph: state.boss.phase,
         enr: state.boss.enraged ? 1 : 0,
         al: state.boss.alive ? 1 : 0,
+        t: state.boss.type,
+        name: state.boss.name,
       }
     } : {}),
     bossBullets: (state.settings.mode === 'boss' && state.bossBullets) ? state.bossBullets.filter((b) => t >= b.born).map((b) => ({
@@ -3389,6 +3423,7 @@ function snapshot(t) {
       p: [r2(b.p.x), r2(b.p.y), r2(b.p.z)],
       d: [r3(b.v.x), r3(b.v.y), r3(b.v.z)],
       r: b.isRing ? 1 : 0,
+      k: b.kind || (state.boss ? state.boss.type : 'dreadnought'),
     })) : [],
     meteors: state.meteors.map((m) => ({ id: m.id, p: [r2(m.p.x), r2(m.p.y), r2(m.p.z)] })),
   };
