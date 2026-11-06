@@ -47,6 +47,29 @@
 <body>
   <canvas id="game-canvas"></canvas>
 
+  <!-- ===================== WEBGL ALERT ===================== -->
+  <div id="webgl-alert" class="webgl-alert glass hidden">
+    <div class="webgl-alert-badge">⚠️ GRAPHICS ACCELERATION REQUIRED</div>
+    <div class="webgl-alert-body">
+      <p class="webgl-alert-title">Sunset Squadron couldn't initialize 3D WebGL graphics on this computer. To fly:</p>
+      <div class="webgl-alert-steps">
+        <div class="webgl-step">
+          <span class="step-num">1</span>
+          <span>Open browser settings: <code id="webgl-browser-url">chrome://settings/system</code></span>
+        </div>
+        <div class="webgl-step">
+          <span class="step-num">2</span>
+          <span>Turn ON <strong>"Use graphics acceleration when available"</strong> (hardware acceleration)</span>
+        </div>
+        <div class="webgl-step">
+          <span class="step-num">3</span>
+          <span>Relaunch your browser and reload this page to fly!</span>
+        </div>
+      </div>
+      <button id="btn-webgl-retry" class="glass-btn webgl-retry-btn" type="button">🔄 RETRY INITIALIZATION</button>
+    </div>
+  </div>
+
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="screen">
     <div class="lobby-bg"></div>
@@ -246,6 +269,16 @@
         <span class="radar-tag-dist" id="radar-tag-dist">--m</span>
       </div>
     </div>
+
+    <!-- Desktop Flight Control Bar -->
+    <div id="desktop-controls-bar" class="desktop-controls-bar glass-soft">
+      <span class="ctrl-chip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>▲</kbd><kbd>◄</kbd><kbd>▼</kbd><kbd>►</kbd> Steer</span>
+      <span class="ctrl-chip"><kbd>Shift</kbd> / <kbd>R-Click</kbd> Boost</span>
+      <span class="ctrl-chip"><kbd>Space</kbd> / <kbd>L-Click</kbd> Fire</span>
+      <span class="ctrl-chip"><kbd>Q</kbd> / <kbd>E</kbd> Barrel Roll</span>
+      <span class="ctrl-chip"><kbd>Click Pilot</kbd> Radar Lock</span>
+      <span class="ctrl-chip"><kbd>1-5</kbd> Emote</span>
+    </div>
   </div>
 
   <!-- ===================== TOUCH CONTROLS ===================== -->
@@ -354,7 +387,7 @@
     </div>
   </div>
 
-  <div id="rotate-hint" class="hidden">Rotate your iPad to landscape ↻</div>
+  <div id="rotate-hint" class="hidden">Please rotate device to landscape ↻</div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="js/main.js"></script>

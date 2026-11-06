@@ -1196,8 +1196,48 @@
     - Dynamic HUD headers, phase announcements, victory banners, and hit tracking for each individual boss type.
   - **Automated Tests:** Added 4 new test suites in `test/boss.test.js` verifying boss catalog metadata, HP scaling per pilot count across all 4 boss types, collision and core weak-point radii, Phase 2 Overdrive speed transitions, and projectile cadence. All 85 unit tests passing (100%).
 
+- **Cross-Platform Laptop & Desktop Support (`public/js/graphics.js`, `public/js/controls.js`, `public/js/main.js`, `public/index.html`, `public/style.css`, `test/desktop.test.js`):**
+  - **Problem Identified & Root Cause:**
+    * Error logged by client: `Uncaught Error: Error creating WebGL context.` at `THREE.WebGLRenderer` in `graphics.js:42` called from `main.js:114` on macOS 10.15.7 Chrome (IP `84.85.93.238`).
+    * Rigid initialization requesting `powerPreference: 'high-performance'` failed on laptops with integrated Intel Iris/HD or AMD APUs, or when operating on battery. Because `new Graphics` ran at module top-level in `main.js`, this uncaught exception stopped the entire JavaScript runtime before event listeners, lobby handlers, sound, or socket connections could mount.
+    * Desktop controls quirk: `controls.js` disabled keyboard flight (`_applyKeys`) whenever `this.mouseDown` was true, causing WASD and Arrow key steering to freeze whenever a player clicked.
+    * Touch UI clutter: The mobile touch joystick knob and 132px touch buttons hovered over the screen on laptop/desktop displays.
+  - **Resilient WebGL Renderer Architecture (`public/js/graphics.js`):**
+    * Implemented `createResilientRenderer(canvas, userOptions, rendererFactory)` with 7 fallback tiers:
+      1) WebGL 2 with `powerPreference: 'default'` (safe for integrated and dual-GPU laptops)
+      2) WebGL 2 with default attributes (no power preference requirement)
+      3) WebGL 2 minimal attributes
+      4) WebGL 2 raw
+      5) WebGL 1 standard (`webgl`)
+      6) WebGL 1 minimal
+      7) Experimental WebGL (`experimental-webgl`)
+    * DOM canvas reset fallback: Automatically replaces tainted `<canvas>` DOM nodes if a previous `getContext` failure locked the element in Chromium/WebKit.
+    * WebGL context restoration: Hooks `webglcontextlost` (calling `preventDefault()` to allow restoration) and `webglcontextrestored`.
+    * Post-Processing Composer Fallback: `Graphics.render(dt)` wraps `composer.render(dt)` in a try/catch, gracefully falling back to direct `renderer.render(scene, camera)` if floating-point render targets or bloom shaders are unsupported on low-end GPUs.
+  - **Safe Client Initialization & Actionable WebGL Alert (`public/js/main.js`, `public/index.html`, `public/style.css`):**
+    * Wrapped `new Graphics` in safe try/catch. If hardware graphics acceleration is completely turned off in browser flags, `main.js` continues running so lobby, sound, pilot selection, socket connections, and hangar UI remain alive.
+    * Added sleek, prominent `#webgl-alert` notification guiding users to enable "Use graphics acceleration when available" in browser settings (`chrome://settings/system`, `edge://settings/system`, or `brave://settings/system`) with a one-click `🔄 RETRY INITIALIZATION` button.
+    * Protected `initHangarTurntable` with `createResilientRenderer` and try/catch guards so secondary turntable context limits never crash the hangar modal.
+  - **Enhanced Desktop & Laptop Controls (`public/js/controls.js`, `public/style.css`, `public/index.html`):**
+    * Absolute Keyboard Precedence: In `_applyKeys()`, active WASD and Arrow key steering takes immediate priority over mouse state, completely preventing steering lockup on click.
+    * Full Mouse & Keyboard Mapping:
+      - `W` / `ArrowUp`: Dive / pitch down
+      - `S` / `ArrowDown`: Climb / pitch up
+      - `A` / `ArrowLeft`: Turn / roll left
+      - `D` / `ArrowRight`: Turn / roll right
+      - `Shift`: Boost (quick tap = barrel roll)
+      - `Space` / `Left-Click`: Launch standard fireworks / rockets
+      - `Q` / `E`: Instant barrel roll deflection
+      - `Right-Click`: Boost (quick tap = barrel roll)
+      - `Click on Wingman/Pilot/Boss`: Target radar-guided homing missile
+      - Keys `1`, `2`, `3`, `4`, `5`: Quick pilot radio chatter / emotes
+    * Clean Desktop View: On fine-pointer devices (`@media (hover: hover) and (pointer: fine)`), mobile touch clusters and joystick knobs are hidden.
+    * Sleek Desktop HUD: Displays `#desktop-controls-bar` pill at the bottom of the flight screen during rounds.
+    * Device-Agnostic Rotate Hint: Excluded rotate prompt on fine-pointer laptops and updated copy from "Rotate your iPad" to "Please rotate device to landscape ↻".
+  - **Automated Tests:** Added `test/desktop.test.js` validating WASD/Arrow steering, mouse click independence, Space/Left-Click fire, Shift/Q/E/Right-Click roll and boost, radar targeting tap handler, WebGL fallback tier recovery, and graceful disabled-WebGL handling. All 92 unit and integration tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 Boss Raid titan encounters) across 4 procedural maps are fully operational.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers.
 - Optional future enhancements:
   * Additional party sponsor modifiers or extra weapon loadouts.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.

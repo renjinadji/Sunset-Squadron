@@ -1,7 +1,7 @@
 // main.js - game state machine, Socket.io client, 60fps render + local flight prediction,
 // remote interpolation, HUD and lobby wiring.
 import * as THREE from 'three';
-import { Graphics, ParticleSystem, PRESETS } from './graphics.js';
+import { Graphics, ParticleSystem, PRESETS, createResilientRenderer } from './graphics.js';
 import { World, islandCollision, WATER_LEVEL, WORLD_RADIUS, CEILING } from './world.js';
 import { Jet, Crown, Ribbon, Balloon, Rocket, Pickup, Mine, Meteor, Blimp, DreadnoughtBoss, ZeppelinBoss, UfoBoss, DragonBoss, createBossMesh, BossBullet, makeEmojiSprite, powerupPalette, FIREWORK_PALETTES, SPLASH_COLORS, GOLD_COLORS, SHIELD_COLORS } from './entities.js';
 import { Controls } from './controls.js';
@@ -106,16 +106,60 @@ const ui = {
   resultsReceipt: $('results-receipt'), receiptTotalPayout: $('receipt-total-payout'), receiptBreakdown: $('receipt-breakdown'), receiptBalanceVal: $('receipt-balance-val'),
   joyBase: $('joy-base'), joyKnob: $('joy-knob'), btnBoost: $('btn-boost'), btnFire: $('btn-fire'),
   emoteBar: $('emote-bar'),
+  webglAlert: $('webgl-alert'),
+  desktopControlsBar: $('desktop-controls-bar'),
 };
 
 // ---------------------------------------------------------------------------
 // Core objects
 // ---------------------------------------------------------------------------
-const gfx = new Graphics($('game-canvas'));
+let gfx = null;
+let webglError = null;
+
+try {
+  gfx = new Graphics($('game-canvas'));
+} catch (err) {
+  webglError = err;
+  console.error('[Sunset Squadron] WebGL initialization error:', err);
+}
+
+function showWebglWarning() {
+  if (ui.webglAlert) {
+    ui.webglAlert.classList.remove('hidden');
+    const isEdge = /Edg\//.test(navigator.userAgent);
+    const isBrave = (navigator.brave && typeof navigator.brave.isBrave === 'function');
+    const isFirefox = /Firefox\//.test(navigator.userAgent);
+    const urlEl = $('webgl-browser-url');
+    if (urlEl) {
+      if (isEdge) urlEl.textContent = 'edge://settings/system';
+      else if (isBrave) urlEl.textContent = 'brave://settings/system';
+      else if (isFirefox) urlEl.textContent = 'about:config (search webgl.force-enabled)';
+      else urlEl.textContent = 'chrome://settings/system';
+    }
+  }
+}
+
+function retryWebglInit() {
+  try {
+    const canvas = $('game-canvas');
+    gfx = new Graphics(canvas);
+    webglError = null;
+    if (ui.webglAlert) ui.webglAlert.classList.add('hidden');
+    if (window.__sunset) window.__sunset.gfx = gfx;
+    loadHostInfo().then((info) => {
+      buildWorld(info ? info.seed : 1337, game.map);
+      gfx.applyPreset(game.preset || 'sunset');
+      requestAnimationFrame(frame);
+    });
+  } catch (e) {
+    console.error('[Sunset Squadron] Retry WebGL initialization failed:', e);
+    showWebglWarning();
+  }
+}
+
 const sound = new SoundEngine();
 const controls = new Controls(ui.touch, ui.joyBase, ui.joyKnob, ui.btnBoost, ui.btnFire);
 controls.onTargetTap = (screenX, screenY) => handleScreenTargetTap(screenX, screenY);
-wireEmotes();
 let world = null;
 let socket = null;
 
@@ -601,7 +645,7 @@ function renderRoster(lobby) {
   }
   if (lobby.settings.preset !== game.preset) {
     game.preset = lobby.settings.preset;
-    gfx.applyPreset(game.preset);
+    if (gfx) gfx.applyPreset(game.preset);
   }
   game.mode = lobby.settings.mode;
   if (lobby.leaderboard) { game.leaderboard = lobby.leaderboard; renderLeaderboard(); }
@@ -611,6 +655,8 @@ function wireLobby() {
   ui.btnLaunch.addEventListener('click', () => launch());
   ui.btnLaunch.addEventListener('touchend', (e) => { e.preventDefault(); launch(); }, { passive: false });
   ui.btnStart.addEventListener('click', () => { sound.resume(); if (socket) socket.emit('startRound'); });
+  const retryBtn = $('btn-webgl-retry');
+  if (retryBtn) retryBtn.addEventListener('click', () => retryWebglInit());
   const setting = (key, value) => { if (socket) socket.emit('setSettings', { [key]: value }); };
   for (const b of ui.mapToggle.children) b.addEventListener('click', () => setting('map', b.dataset.map));
   for (const b of ui.modeToggle.children) b.addEventListener('click', () => setting('mode', b.dataset.mode));
@@ -627,6 +673,11 @@ function wireLobby() {
 let launching = false;
 function launch() {
   if (launching || game.joined) return;
+  if (!gfx) {
+    showWebglWarning();
+    ui.joinError.textContent = 'Graphics acceleration required to fly. See banner above.';
+    return;
+  }
   launching = true;
   game.playerName = ui.playerName.value.replace(/[^\w\- ]/g, '').slice(0, 14).trim();
   localStorage.setItem('ss_player_name', game.playerName);
@@ -911,13 +962,21 @@ function initHangarTurntable() {
   if (turntableRenderer) return;
   if (!ui.hangarTurntableCanvas) return;
 
-  turntableRenderer = new THREE.WebGLRenderer({
-    canvas: ui.hangarTurntableCanvas,
-    alpha: true,
-    antialias: true,
-    powerPreference: 'high-performance',
-  });
-  turntableRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  try {
+    const res = createResilientRenderer(ui.hangarTurntableCanvas, {
+      alpha: true,
+      antialias: true,
+    });
+    if (!res || !res.renderer) {
+      console.warn('[Sunset Squadron] Hangar turntable WebGL context unavailable.');
+      return;
+    }
+    turntableRenderer = res.renderer;
+    turntableRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  } catch (err) {
+    console.warn('[Sunset Squadron] Failed to initialize hangar turntable WebGL:', err);
+    return;
+  }
 
   turntableScene = new THREE.Scene();
 
@@ -1002,7 +1061,11 @@ function startTurntable() {
     }
 
     if (turntableRenderer && turntableScene && turntableCamera) {
-      turntableRenderer.render(turntableScene, turntableCamera);
+      try {
+        turntableRenderer.render(turntableScene, turntableCamera);
+      } catch (err) {
+        console.warn('[Sunset Squadron] Turntable render failed:', err);
+      }
     }
 
     turntableRaf = requestAnimationFrame(animateTurntable);
@@ -2478,10 +2541,10 @@ function wireEmotes() {
     btn.addEventListener('click', () => sendEmote(btn.dataset.emoji));
     btn.addEventListener('touchend', (e) => { e.preventDefault(); sendEmote(btn.dataset.emoji); }, { passive: false });
   }
-  // Desktop: keys 1-4 pick the first four emotes
+  // Desktop: keys 1-5 pick the five quick emotes
   window.addEventListener('keydown', (e) => {
     if (game.phase !== 'playing') return;
-    const idx = ['1', '2', '3', '4'].indexOf(e.key);
+    const idx = ['1', '2', '3', '4', '5'].indexOf(e.key);
     if (idx >= 0 && ui.emoteBar.children[idx]) {
       e.preventDefault();
       sendEmote(ui.emoteBar.children[idx].dataset.emoji);
@@ -2607,8 +2670,9 @@ function hasFx(type) { return me.fx[type] !== undefined && me.fx[type] - (nowS()
 
 function checkOrientation() {
   const touch = 'ontouchstart' in window && navigator.maxTouchPoints > 0;
+  const isFinePointer = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
   const portrait = window.innerHeight > window.innerWidth;
-  ui.rotateHint.classList.toggle('hidden', !(touch && portrait && game.phase === 'playing'));
+  ui.rotateHint.classList.toggle('hidden', !(touch && !isFinePointer && portrait && game.phase === 'playing'));
 }
 window.addEventListener('resize', checkOrientation);
 
@@ -3263,9 +3327,8 @@ let lastFrame = performance.now();
 let timerText = '';
 function frame(nowMs) {
   requestAnimationFrame(frame);
+  if (!gfx || !world) return;
   const dt = Math.min(0.05, (nowMs - lastFrame) / 1000);
-  lastFrame = nowMs;
-  if (!world) return;
   if (game.phase === 'playing') {
     stepLocalFlight(dt);
     stepRemote(dt);
@@ -3320,12 +3383,16 @@ async function boot() {
   wireHangar();
   const info = await loadHostInfo();
   loadLeaderboard();
-  buildWorld(info ? info.seed : 1337, game.map);
-  gfx.applyPreset('sunset');
+  if (gfx) {
+    buildWorld(info ? info.seed : 1337, game.map);
+    gfx.applyPreset('sunset');
+    requestAnimationFrame(frame);
+  } else {
+    showWebglWarning();
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
   window.addEventListener('pointerdown', () => sound.resume(), { passive: true });
-  requestAnimationFrame(frame);
-  window.__sunset = { game, me, remote, rockets, balloons, pickups, mines, decoys, gfx, controls, PILOTS, POWERUPS, get world() { return world; }, get socket() { return socket; } };
+  window.__sunset = { game, me, remote, rockets, balloons, pickups, mines, decoys, get gfx() { return gfx; }, controls, PILOTS, POWERUPS, get world() { return world; }, get socket() { return socket; } };
 }
 
 boot();

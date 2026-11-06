@@ -36,10 +36,134 @@ export const PRESETS = {
 const PARTICLE_COUNT = 600;
 const BLOOM_THRESHOLD = 1.35;
 
+/**
+ * Resilient WebGL renderer factory.
+ * Sequentially attempts WebGL 2 with conservative power preferences, falls back
+ * across context attributes and WebGL 1/experimental variants, handles DOM canvas
+ * replacement if previous attempts tainted the canvas node, and attaches context-lost guards.
+ * Returns { renderer, canvas, gl } or null on complete failure.
+ */
+export function createResilientRenderer(canvas, userOptions = {}, rendererFactory = (opts) => new THREE.WebGLRenderer(opts)) {
+  if (!canvas) return null;
+
+  const antialias = userOptions.antialias ?? false;
+  const alpha = userOptions.alpha ?? false;
+
+  // Broad fallback tiers: Never force 'high-performance' as the first option, because laptops
+  // on battery or with integrated GPUs (macOS Intel Iris, AMD APUs, etc.) fail context allocation
+  // when discrete GPUs are powered down or absent.
+  const attempts = [
+    // Tier 1: WebGL 2 with 'default' power preference
+    { type: 'webgl2', attrs: { antialias, alpha, powerPreference: 'default' } },
+    // Tier 2: WebGL 2 with no power preference
+    { type: 'webgl2', attrs: { antialias, alpha } },
+    // Tier 3: WebGL 2 minimal
+    { type: 'webgl2', attrs: { alpha } },
+    // Tier 4: WebGL 2 raw
+    { type: 'webgl2', attrs: {} },
+    // Tier 5: WebGL 1 standard
+    { type: 'webgl', attrs: { antialias, alpha, powerPreference: 'default' } },
+    // Tier 6: WebGL 1 minimal
+    { type: 'webgl', attrs: { alpha } },
+    // Tier 7: Experimental WebGL
+    { type: 'experimental-webgl', attrs: {} },
+  ];
+
+  let gl = null;
+  let activeCanvas = canvas;
+
+  function tryAcquire(c) {
+    for (const attempt of attempts) {
+      try {
+        const ctx = c.getContext(attempt.type, attempt.attrs);
+        if (ctx) return ctx;
+      } catch (e) {
+        // Continue to next fallback strategy
+      }
+    }
+    return null;
+  }
+
+  gl = tryAcquire(activeCanvas);
+
+  // If initial attempts failed, replace the canvas element in the DOM.
+  // Certain Chromium and WebKit builds permanently taint a canvas DOM node after a failed getContext.
+  if (!gl && activeCanvas.parentNode) {
+    try {
+      const fresh = document.createElement('canvas');
+      fresh.id = activeCanvas.id;
+      fresh.className = activeCanvas.className;
+      fresh.style.cssText = activeCanvas.style.cssText;
+      if (activeCanvas.width) fresh.width = activeCanvas.width;
+      if (activeCanvas.height) fresh.height = activeCanvas.height;
+      activeCanvas.parentNode.replaceChild(fresh, activeCanvas);
+      activeCanvas = fresh;
+      gl = tryAcquire(activeCanvas);
+    } catch (domErr) {
+      console.warn('[Sunset Squadron] Canvas DOM reset fallback failed:', domErr);
+    }
+  }
+
+  // Register WebGL context restoration listeners
+  if (activeCanvas.addEventListener) {
+    activeCanvas.addEventListener('webglcontextlost', (e) => {
+      if (e.preventDefault) e.preventDefault();
+      console.warn('[Sunset Squadron] WebGL context lost. Preventing default to allow restoration.');
+    }, false);
+    activeCanvas.addEventListener('webglcontextrestored', () => {
+      console.info('[Sunset Squadron] WebGL context restored.');
+    }, false);
+  }
+
+  // If we obtained a gl context explicitly, feed it directly into THREE.WebGLRenderer
+  if (gl) {
+    try {
+      const renderer = rendererFactory({
+        canvas: activeCanvas,
+        context: gl,
+        antialias,
+        alpha,
+      });
+      return { renderer, canvas: activeCanvas, gl };
+    } catch (threeErr) {
+      console.warn('[Sunset Squadron] THREE.WebGLRenderer explicit context creation failed:', threeErr);
+    }
+  }
+
+  // Fallback: Let THREE attempt default WebGL context allocation
+  try {
+    const renderer = rendererFactory({
+      canvas: activeCanvas,
+      antialias: false,
+      alpha,
+      powerPreference: 'default',
+    });
+    return { renderer, canvas: activeCanvas, gl: (renderer.getContext ? renderer.getContext() : gl) };
+  } catch (safeErr) {
+    console.warn('[Sunset Squadron] THREE.WebGLRenderer safe default creation failed:', safeErr);
+  }
+
+  // Final minimal attempt
+  try {
+    const renderer = rendererFactory({ canvas: activeCanvas });
+    return { renderer, canvas: activeCanvas, gl: (renderer.getContext ? renderer.getContext() : gl) };
+  } catch (finalErr) {
+    console.error('[Sunset Squadron] All WebGLRenderer initialization attempts failed:', finalErr);
+    return null;
+  }
+}
+
 export class Graphics {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false });
+    const res = createResilientRenderer(canvas, { antialias: false, alpha: false });
+    if (!res || !res.renderer) {
+      throw new Error('WebGL is not supported or graphics acceleration is disabled.');
+    }
+    this.renderer = res.renderer;
+    this.canvas = res.canvas;
+    this.isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && (this.renderer.getContext() instanceof WebGL2RenderingContext);
+
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
@@ -58,7 +182,8 @@ export class Graphics {
     this.sun = new THREE.DirectionalLight(0xff8c42, 3.2);
     this.sun.position.set(300, 180, -250);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    const shadowMapSize = this.isWebGL2 ? 2048 : 1024;
+    this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     this.sun.shadow.camera.left = -400;
     this.sun.shadow.camera.right = 400;
     this.sun.shadow.camera.top = 400;
@@ -76,16 +201,22 @@ export class Graphics {
     this.scene.add(this.hemi);
 
     // Composer: render -> selective-threshold bloom -> output (tone mapping + sRGB)
-    this.composer = new EffectComposer(this.renderer);
-    this.renderPass = new RenderPass(this.scene, this.camera);
-    this.composer.addPass(this.renderPass);
-    // The composer renders in linear HDR (half-float). Sun 3.2 + hemisphere 1.45 lights put bright
-    // sand/cloud facets at ~1.0-1.3 linear luminance, so the threshold sits just above that: terrain,
-    // water and jets stay un-bloomed while emissive 2.5-4.0 thrusters, gates, rockets and the crown glow.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.75, 0.4, BLOOM_THRESHOLD);
-    this.composer.addPass(this.bloom);
-    this.outputPass = new OutputPass();
-    this.composer.addPass(this.outputPass);
+    // Protected by graceful fallback to direct renderer on GPUs that lack half-float / HDR render targets
+    this.useComposer = true;
+    try {
+      this.composer = new EffectComposer(this.renderer);
+      this.renderPass = new RenderPass(this.scene, this.camera);
+      this.composer.addPass(this.renderPass);
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.75, 0.4, BLOOM_THRESHOLD);
+      this.composer.addPass(this.bloom);
+      this.outputPass = new OutputPass();
+      this.composer.addPass(this.outputPass);
+    } catch (compErr) {
+      console.warn('[Sunset Squadron] Post-processing composer unsupported on this GPU; using direct renderer:', compErr);
+      this.useComposer = false;
+      this.composer = null;
+      this.bloom = null;
+    }
 
     this.shake = 0;
     this._shakeVec = new THREE.Vector3();
@@ -102,11 +233,21 @@ export class Graphics {
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
-    this.composer.setSize(w, h);
-    this.bloom.resolution.set(w, h);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    if (this.renderer) {
+      this.renderer.setSize(w, h, false);
+    }
+    if (this.useComposer && this.composer) {
+      try {
+        this.composer.setSize(w, h);
+        if (this.bloom) this.bloom.resolution.set(w, h);
+      } catch (e) {
+        this.useComposer = false;
+      }
+    }
+    if (this.camera) {
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   attachWorld(world) {
@@ -126,7 +267,9 @@ export class Graphics {
     this.scene.fog.color.set(p.fog);
     this.scene.fog.density = p.fogDensity;
     this.renderer.toneMappingExposure = p.exposure;
-    this.bloom.strength = p.bloom;
+    if (this.bloom) {
+      this.bloom.strength = p.bloom;
+    }
     if (this.world) {
       this.world.setSky(p.zenith, p.horizon, p.glow, new THREE.Vector3(p.sunPos[0], p.sunPos[1], p.sunPos[2]), p.stars);
       this.world.setOceanColor(p.ocean);
@@ -151,7 +294,18 @@ export class Graphics {
       this.shake = Math.max(0, this.shake - dt * 3);
     }
     this.particles.update(dt, this.camera.position);
-    this.composer.render(dt);
+
+    if (this.useComposer && this.composer) {
+      try {
+        this.composer.render(dt);
+      } catch (err) {
+        console.warn('[Sunset Squadron] Composer render failed, falling back to direct render:', err);
+        this.useComposer = false;
+        this.renderer.render(this.scene, this.camera);
+      }
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 }
 

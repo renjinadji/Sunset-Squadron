@@ -195,29 +195,35 @@ export class Controls {
 
   // ---------------- mouse (desktop) ----------------
   _onMouseDown(e) {
-    if (!this.enabled || e.button !== 0) return;
+    if (!this.enabled) return;
+
+    // Desktop/Laptop: Right-click triggers boost
+    if (e.button === 2) {
+      e.preventDefault();
+      this.buttonTouches.set('mouse_boost', { kind: 'boost', startedAt: performance.now() });
+      this._refreshButtons();
+      return;
+    }
+
+    if (e.button !== 0) return;
     e.preventDefault();
+
+    // Check direct click on on-screen button elements (if active)
     if (this._isDirectButtonHit(e.clientX, e.clientY)) {
       const kind = this._hitButton(e.clientX, e.clientY);
       this.buttonTouches.set('mouse', { kind, startedAt: performance.now() });
       this._refreshButtons();
       return;
     }
+
+    // Computer: Left-click on a wingman, enemy player, or boss targets radar missile!
     if (this.onTargetTap && this.onTargetTap(e.clientX, e.clientY)) {
       return;
     }
-    if (e.clientX < window.innerWidth * 0.5) {
-      this.mouseDown = true;
-      this.joyOrigin = { x: e.clientX, y: e.clientY };
-      this.joyBase.style.left = `${e.clientX}px`;
-      this.joyBase.style.top = `${e.clientY}px`;
-      this.joyBase.classList.add('active');
-      this._setKnob(0, 0);
-    } else {
-      const kind = this._hitButton(e.clientX, e.clientY);
-      this.buttonTouches.set('mouse', { kind, startedAt: performance.now() });
-      this._refreshButtons();
-    }
+
+    // Computer: Left-click anywhere else fires fireworks
+    this.buttonTouches.set('mouse', { kind: 'fire', startedAt: performance.now() });
+    this._refreshButtons();
   }
   _onMouseMove(e) {
     if (!this.mouseDown) return;
@@ -229,12 +235,14 @@ export class Controls {
     this.joyX = dx / JOY_RADIUS;
     this.joyY = dy / JOY_RADIUS;
   }
-  _onMouseUp() {
+  _onMouseUp(e) {
     if (this.mouseDown) {
       this.mouseDown = false;
-      this.joyX = 0; this.joyY = 0;
       this.joyBase.classList.remove('active');
       this._setKnob(0, 0);
+      if (!this.keys.size) {
+        this.joyX = 0; this.joyY = 0;
+      }
     }
     if (this.buttonTouches.has('mouse')) {
       const info = this.buttonTouches.get('mouse');
@@ -242,16 +250,27 @@ export class Controls {
       if (info.kind === 'boost' && performance.now() - info.startedAt < TAP_MAX_MS) this._rollTaps++;
       this._refreshButtons();
     }
+    if (this.buttonTouches.has('mouse_boost')) {
+      const info = this.buttonTouches.get('mouse_boost');
+      this.buttonTouches.delete('mouse_boost');
+      if (performance.now() - info.startedAt < TAP_MAX_MS) this._rollTaps++;
+      this._refreshButtons();
+    }
   }
 
   // ---------------- keyboard (desktop) ----------------
   _onKey(e, down) {
     if (!this.enabled) return;
-    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+    const k = e.key.toLowerCase();
     const map = {
-      w: 'up', ArrowUp: 'up', s: 'down', ArrowDown: 'down',
-      a: 'left', ArrowLeft: 'left', d: 'right', ArrowRight: 'right',
-      Shift: 'shift', ' ': ' ', q: 'roll',
+      w: 'up', arrowup: 'up',
+      s: 'down', arrowdown: 'down',
+      a: 'left', arrowleft: 'left',
+      d: 'right', arrowright: 'right',
+      shift: 'shift', ' ': ' ',
+      q: 'roll', e: 'roll',
     };
     const action = map[k];
     if (!action) return;
@@ -268,15 +287,19 @@ export class Controls {
   }
 
   _applyKeys() {
-    // Keyboard overrides the stick only while the stick is idle
-    if (this.joyTouchId === null && !this.mouseDown) {
-      let x = 0, y = 0;
-      if (this.keys.has('left')) x -= 1;
-      if (this.keys.has('right')) x += 1;
-      if (this.keys.has('up')) y -= 1;
-      if (this.keys.has('down')) y += 1;
+    let x = 0, y = 0;
+    if (this.keys.has('left')) x -= 1;
+    if (this.keys.has('right')) x += 1;
+    if (this.keys.has('up')) y -= 1;
+    if (this.keys.has('down')) y += 1;
+
+    if (x !== 0 || y !== 0) {
+      // Keyboard input takes active precedence over mouse/stick idle
       this.joyX = x;
       this.joyY = y;
+    } else if (this.joyTouchId === null && !this.mouseDown) {
+      this.joyX = 0;
+      this.joyY = 0;
     }
     this._refreshButtons();
   }
