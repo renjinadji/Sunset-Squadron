@@ -1236,8 +1236,25 @@
     * Device-Agnostic Rotate Hint: Excluded rotate prompt on fine-pointer laptops and updated copy from "Rotate your iPad" to "Please rotate device to landscape ↻".
   - **Automated Tests:** Added `test/desktop.test.js` validating WASD/Arrow steering, mouse click independence, Space/Left-Click fire, Shift/Q/E/Right-Click roll and boost, radar targeting tap handler, WebGL fallback tier recovery, and graceful disabled-WebGL handling. All 92 unit and integration tests passing (100%).
 
+- **Boss Movement Speed Acceleration (+25% Faster) (`shared/bosses.js`, `server.js`, `public/js/entities.js`, `test/boss.test.js`):**
+  - **Physics & Orbit Speeds Increased by 25% across all 4 Boss Encounters:**
+    * **Sky Dreadnought (`dreadnought`):** Phase 1 cruise increased from 18 to 22.5 m/s (+25%); Phase 2 Overdrive increased from 28 to 35 m/s (+25%).
+    * **The Mega Zeppelin (`zeppelin`):** Phase 1 cruise increased from 15 to 18.75 m/s (+25%); Phase 2 Overdrive increased from 24 to 30 m/s (+25%).
+    * **Giant UFO (`ufo`):** Phase 1 cruise increased from 22 to 27.5 m/s (+25%); Phase 2 Overdrive increased from 34 to 42.5 m/s (+25%).
+    * **The Sky Dragon (`dragon`):** Phase 1 cruise increased from 20 to 25 m/s (+25%); Phase 2 Overdrive increased from 30 to 37.5 m/s (+25%).
+  - **Server Trajectory & Bot Intercept Sync (`server.js`):**
+    * In `stepBossRaid`, scaled vertical oscillation frequency `altitudePhase` from `0.35` to `0.4375` (+25%) so the 3D sinusoidal wave stays harmonically synchronized with the 25% faster orbit.
+    * AI wingmen bots dynamically compute target lead velocity (`vscale(boss.dir, boss.orbitSpeed)`), automatically leading their rocket fire ahead of the faster boss path.
+  - **Procedural 3D Visual Kinematics (`public/js/entities.js`):**
+    * Scaled visual animation frequencies by 25% to match the faster movement speed:
+      - Dreadnought lift rotors: 18 -> 22.5 (P1) / 28 -> 35 (P2).
+      - Zeppelin brass propellers: 20 -> 25 (P1) / 35 -> 43.75 (P2).
+      - UFO counter-rotating anti-gravity rings: outer ring 3.2 -> 4.0 (P1) / 6.5 -> 8.125 (P2); inner ring 4.0 -> 5.0 (P1) / 8.0 -> 10.0 (P2).
+      - Dragon wing flapping: 6.0 -> 7.5 (P1) / 9.5 -> 11.875 (P2); spinal chain serpentine undulation: 3.8 -> 4.75 (P1) / 5.5 -> 6.875 (P2).
+  - **Automated Tests:** Added dedicated test suite in `test/boss.test.js` validating the 25% speed increase across all bosses in Phase 1 and Phase 2. All 93 unit and integration tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 accelerated Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers.
 - Optional future enhancements:
   * Additional party sponsor modifiers or extra weapon loadouts.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.

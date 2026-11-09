@@ -3311,8 +3311,8 @@ export class DreadnoughtBoss {
       }
     }
 
-    // Rotors spin
-    const spinSpd = this.enraged ? 28 : 18;
+    // Rotors spin (scaled 25% faster)
+    const spinSpd = this.enraged ? 35 : 22.5;
     if (this.rotors[0]) this.rotors[0].rotation.z += dt * spinSpd;
     if (this.rotors[1]) this.rotors[1].rotation.z -= dt * spinSpd;
 
@@ -3653,8 +3653,8 @@ export class ZeppelinBoss {
       }
     }
 
-    // Propellers spin
-    const propSpd = this.enraged ? 35 : 20;
+    // Propellers spin (scaled 25% faster)
+    const propSpd = this.enraged ? 43.75 : 25;
     for (const p of this.propellers) {
       p.rotation.z += dt * propSpd;
     }
@@ -3937,9 +3937,9 @@ export class UfoBoss {
       }
     }
 
-    // Counter-rotating rings
-    const outerSpd = this.enraged ? 6.5 : 3.2;
-    const innerSpd = this.enraged ? 8.0 : 4.0;
+    // Counter-rotating rings (scaled 25% faster)
+    const outerSpd = this.enraged ? 8.125 : 4.0;
+    const innerSpd = this.enraged ? 10.0 : 5.0;
     this.outerRing.rotation.y += dt * outerSpd;
     this.innerRing.rotation.y -= dt * innerSpd;
 
@@ -4278,16 +4278,16 @@ export class DragonBoss {
       }
     }
 
-    // Realistic sinusoidal wing flapping
-    const flapSpeed = this.enraged ? 9.5 : 6.0;
+    // Realistic sinusoidal wing flapping (scaled 25% faster)
+    const flapSpeed = this.enraged ? 11.875 : 7.5;
     const flapAng = Math.sin(t * flapSpeed);
     this.wingL.rotation.z = flapAng * 0.45;
     this.wingR.rotation.z = -flapAng * 0.45;
     this.wingL.rotation.y = Math.cos(t * flapSpeed) * 0.15;
     this.wingR.rotation.y = -Math.cos(t * flapSpeed) * 0.15;
 
-    // Fluid serpentine undulation along the spinal chain
-    const waveFreq = this.enraged ? 5.5 : 3.8;
+    // Fluid serpentine undulation along the spinal chain (scaled 25% faster)
+    const waveFreq = this.enraged ? 6.875 : 4.75;
     for (let i = 0; i < this.segments.length; i++) {
       const seg = this.segments[i];
       const phase = t * waveFreq - i * 0.65;

@@ -61,14 +61,14 @@ test('boss damage and phase transition logic (Overdrive Phase 2 at 50% HP)', () 
   let hp = maxHp;
   let phase = 1;
   let enraged = false;
-  let speed = 18;
+  let speed = 22.5;
 
   function applyDamage(amount) {
     hp = Math.max(0, hp - amount);
     if (phase === 1 && hp <= Math.round(maxHp * 0.5)) {
       phase = 2;
       enraged = true;
-      speed = 28;
+      speed = 35;
     }
   }
 
@@ -77,14 +77,14 @@ test('boss damage and phase transition logic (Overdrive Phase 2 at 50% HP)', () 
   assert.strictEqual(hp, 650);
   assert.strictEqual(phase, 1);
   assert.strictEqual(enraged, false);
-  assert.strictEqual(speed, 18);
+  assert.strictEqual(speed, 22.5);
 
   // Cross 50% threshold (400 HP)
   applyDamage(260);
   assert.strictEqual(hp, 390);
   assert.strictEqual(phase, 2, 'Transitions to Phase 2 at <= 50% HP');
   assert.strictEqual(enraged, true);
-  assert.strictEqual(speed, 28, 'Speed accelerates to 28 m/s in Overdrive');
+  assert.strictEqual(speed, 35, 'Speed accelerates to 35 m/s in Overdrive');
 });
 
 test('boss Sonic Frontiers attack specifications and bullet physics', () => {
@@ -474,5 +474,20 @@ test('multi-boss Phase 2 Overdrive transitions and accelerated flight speeds', (
     assert.strictEqual(phase, 2, `${bType} enters Phase 2 at <= 50% HP`);
     assert.strictEqual(enraged, true);
     assert.strictEqual(currentSpeed, cfg.speedP2, `${bType} accelerates to speedP2 (${cfg.speedP2} m/s)`);
+  }
+});
+
+test('all bosses have 25% increased movement speed in both Phase 1 and Phase 2', () => {
+  const expectedSpeeds = {
+    dreadnought: { p1: 22.5, p2: 35 },
+    zeppelin: { p1: 18.75, p2: 30 },
+    ufo: { p1: 27.5, p2: 42.5 },
+    dragon: { p1: 25, p2: 37.5 },
+  };
+
+  for (const [id, speeds] of Object.entries(expectedSpeeds)) {
+    const boss = BOSS_DATA.bossById(id);
+    assert.strictEqual(boss.speedP1, speeds.p1, `${id} Phase 1 speed must be ${speeds.p1} m/s (+25%)`);
+    assert.strictEqual(boss.speedP2, speeds.p2, `${id} Phase 2 speed must be ${speeds.p2} m/s (+25%)`);
   }
 });

@@ -119,8 +119,8 @@ const BOSS_HP_PER_PILOT = 250;       // Health scaling per additional player or 
 const BOSS_COLLISION_R = 36;         // Hitbox radius for rocket / mine collisions
 const BOSS_CORE_R = 14;              // Critical weak-point radius
 const BOSS_RAM_SPEED = 24;           // Min speed to damage boss by ramming
-const BOSS_SPEED_PHASE1 = 18;        // Cruise speed in phase 1
-const BOSS_SPEED_PHASE2 = 28;        // Accelerated speed in phase 2 enrage
+const BOSS_SPEED_PHASE1 = 22.5;        // Cruise speed in phase 1 (+25% faster)
+const BOSS_SPEED_PHASE2 = 35;          // Accelerated speed in phase 2 enrage (+25% faster)
 const BOSS_MISSILE_INTERVAL_P1 = 4.2; // Seconds between seeker missile salvos in phase 1
 const BOSS_MISSILE_INTERVAL_P2 = 2.4; // Rapid missile salvos in phase 2
 const BOSS_TURRET_BURST_P1 = 1.6;    // Seconds between autocannon tracer bursts in phase 1
@@ -2551,9 +2551,9 @@ function stepBossRaid(dt, t) {
   const boss = state.boss;
   if (!boss || !boss.alive) return;
 
-  // Orbit path around the archipelago
+  // Orbit path around the archipelago (accelerated 25% for faster boss movement)
   boss.orbitAngle += (boss.orbitSpeed / boss.orbitRadius) * dt;
-  boss.altitudePhase += dt * 0.35;
+  boss.altitudePhase += dt * 0.4375;
   const targetX = Math.cos(boss.orbitAngle) * boss.orbitRadius;
   const targetZ = Math.sin(boss.orbitAngle) * boss.orbitRadius;
   const targetY = boss.altitude + Math.sin(boss.altitudePhase) * 22;
