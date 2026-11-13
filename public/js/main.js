@@ -108,6 +108,23 @@ const ui = {
   emoteBar: $('emote-bar'),
   webglAlert: $('webgl-alert'),
   desktopControlsBar: $('desktop-controls-bar'),
+  btnOpenSettings: $('btn-open-settings'),
+  settingsModal: $('settings-modal'),
+  btnCloseSettings: $('btn-close-settings'),
+  btnApplySettings: $('btn-apply-settings'),
+  btnResetSettings: $('btn-reset-settings'),
+  inputSensitivity: $('input-sensitivity'),
+  settingSensitivityVal: $('setting-sensitivity-val'),
+  inputZoom: $('input-zoom'),
+  settingZoomVal: $('setting-zoom-val'),
+  settingInvertVal: $('setting-invert-val'),
+  btnInvertOff: $('btn-invert-off'),
+  btnInvertOn: $('btn-invert-on'),
+  hudZoomPill: $('hud-zoom-pill'),
+  btnZoomOut: $('btn-zoom-out'),
+  hudZoomVal: $('hud-zoom-val'),
+  btnZoomIn: $('btn-zoom-in'),
+  btnHudSettings: $('btn-hud-settings'),
 };
 
 // ---------------------------------------------------------------------------
@@ -202,6 +219,21 @@ const game = {
   event: null,             // active mid-round event: { type, remain, data }
   attractAngle: 0,
 };
+
+// ---------------------------------------------------------------------------
+// Game Settings & Preferences
+// ---------------------------------------------------------------------------
+const SETTINGS_STORAGE_KEY = 'ss_settings';
+const DEFAULT_SETTINGS = {
+  sensitivity: 1.0,
+  zoom: 1.0,
+  invertPitch: false,
+};
+
+const gameSettings = { ...DEFAULT_SETTINGS };
+let targetCameraZoom = 1.0;
+let currentCameraZoom = 1.0;
+let settingsOpen = false;
 
 // Local pilot state (predicted at 60fps)
 const me = {
@@ -1496,14 +1528,226 @@ function wireHangar() {
       if (e.target === ui.hangarModal) closeHangar();
     });
   }
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && game.hangarOpen) {
-      e.preventDefault();
-      closeHangar();
-    }
-  });
   window.addEventListener('resize', () => {
     if (game.hangarOpen) resizeTurntable();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Settings & Zoom Management
+// ---------------------------------------------------------------------------
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.sensitivity === 'number' && Number.isFinite(parsed.sensitivity)) {
+        gameSettings.sensitivity = clamp(parsed.sensitivity, 0.4, 2.0);
+      }
+      if (typeof parsed.zoom === 'number' && Number.isFinite(parsed.zoom)) {
+        gameSettings.zoom = clamp(parsed.zoom, 0.6, 1.6);
+      }
+      if (typeof parsed.invertPitch === 'boolean') {
+        gameSettings.invertPitch = parsed.invertPitch;
+      }
+    }
+  } catch (e) {
+    console.warn('[Sunset Squadron] Failed to load settings from localStorage:', e);
+  }
+  applySettings(false);
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(gameSettings));
+  } catch (e) {
+    console.warn('[Sunset Squadron] Failed to save settings to localStorage:', e);
+  }
+}
+
+function applySettings(persist = true) {
+  controls.setSensitivity(gameSettings.sensitivity);
+  targetCameraZoom = gameSettings.zoom;
+  syncSettingsUI();
+  if (persist) saveSettings();
+}
+
+function syncSettingsUI() {
+  const sensPct = Math.round(gameSettings.sensitivity * 100);
+  const zoomPct = Math.round(gameSettings.zoom * 100);
+
+  if (ui.inputSensitivity) ui.inputSensitivity.value = String(sensPct);
+  if (ui.settingSensitivityVal) ui.settingSensitivityVal.textContent = `${sensPct}%`;
+
+  if (ui.inputZoom) ui.inputZoom.value = String(zoomPct);
+  if (ui.settingZoomVal) ui.settingZoomVal.textContent = `${zoomPct}%`;
+
+  if (ui.hudZoomVal) ui.hudZoomVal.textContent = `${zoomPct}%`;
+
+  if (ui.settingInvertVal) {
+    ui.settingInvertVal.textContent = gameSettings.invertPitch ? 'Inverted (Yoke)' : 'Standard';
+  }
+  if (ui.btnInvertOff) ui.btnInvertOff.classList.toggle('active', !gameSettings.invertPitch);
+  if (ui.btnInvertOn) ui.btnInvertOn.classList.toggle('active', gameSettings.invertPitch);
+
+  document.querySelectorAll('.preset-btn[data-setting="sensitivity"]').forEach((btn) => {
+    btn.classList.toggle('active', parseInt(btn.dataset.val, 10) === sensPct);
+  });
+  document.querySelectorAll('.preset-btn[data-setting="zoom"]').forEach((btn) => {
+    btn.classList.toggle('active', parseInt(btn.dataset.val, 10) === zoomPct);
+  });
+}
+
+function adjustZoom(delta) {
+  // delta > 0 zooms in (closer view); delta < 0 zooms out (wider view)
+  const next = clamp(Math.round((gameSettings.zoom + delta) * 100) / 100, 0.6, 1.6);
+  if (next !== gameSettings.zoom) {
+    gameSettings.zoom = next;
+    applySettings(true);
+  }
+}
+
+function openSettings() {
+  settingsOpen = true;
+  syncSettingsUI();
+  if (ui.settingsModal) ui.settingsModal.classList.remove('hidden');
+}
+
+function closeSettings() {
+  settingsOpen = false;
+  if (ui.settingsModal) ui.settingsModal.classList.add('hidden');
+}
+
+function toggleSettings() {
+  if (settingsOpen) closeSettings();
+  else openSettings();
+}
+
+function wireSettings() {
+  loadSettings();
+
+  if (ui.btnOpenSettings) {
+    ui.btnOpenSettings.addEventListener('click', () => openSettings());
+  }
+  if (ui.btnCloseSettings) {
+    ui.btnCloseSettings.addEventListener('click', () => closeSettings());
+  }
+  if (ui.btnApplySettings) {
+    ui.btnApplySettings.addEventListener('click', () => closeSettings());
+  }
+  if (ui.settingsModal) {
+    ui.settingsModal.addEventListener('click', (e) => {
+      if (e.target === ui.settingsModal) closeSettings();
+    });
+  }
+  if (ui.btnResetSettings) {
+    ui.btnResetSettings.addEventListener('click', () => {
+      gameSettings.sensitivity = DEFAULT_SETTINGS.sensitivity;
+      gameSettings.zoom = DEFAULT_SETTINGS.zoom;
+      gameSettings.invertPitch = DEFAULT_SETTINGS.invertPitch;
+      applySettings(true);
+    });
+  }
+  if (ui.inputSensitivity) {
+    ui.inputSensitivity.addEventListener('input', (e) => {
+      gameSettings.sensitivity = parseInt(e.target.value, 10) / 100;
+      applySettings(true);
+    });
+  }
+  if (ui.inputZoom) {
+    ui.inputZoom.addEventListener('input', (e) => {
+      gameSettings.zoom = parseInt(e.target.value, 10) / 100;
+      applySettings(true);
+    });
+  }
+  document.querySelectorAll('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const setting = btn.dataset.setting;
+      const val = parseInt(btn.dataset.val, 10) / 100;
+      if (setting === 'sensitivity') gameSettings.sensitivity = val;
+      if (setting === 'zoom') gameSettings.zoom = val;
+      applySettings(true);
+    });
+  });
+  if (ui.btnInvertOff) {
+    ui.btnInvertOff.addEventListener('click', () => {
+      gameSettings.invertPitch = false;
+      applySettings(true);
+    });
+  }
+  if (ui.btnInvertOn) {
+    ui.btnInvertOn.addEventListener('click', () => {
+      gameSettings.invertPitch = true;
+      applySettings(true);
+    });
+  }
+
+  // In-Game HUD Zoom buttons & settings button
+  if (ui.btnZoomIn) {
+    const handleZoomIn = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      adjustZoom(0.1);
+    };
+    ui.btnZoomIn.addEventListener('pointerdown', handleZoomIn);
+    ui.btnZoomIn.addEventListener('click', (e) => e.stopPropagation());
+  }
+  if (ui.btnZoomOut) {
+    const handleZoomOut = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      adjustZoom(-0.1);
+    };
+    ui.btnZoomOut.addEventListener('pointerdown', handleZoomOut);
+    ui.btnZoomOut.addEventListener('click', (e) => e.stopPropagation());
+  }
+  if (ui.btnHudSettings) {
+    const handleHudSettings = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSettings();
+    };
+    ui.btnHudSettings.addEventListener('pointerdown', handleHudSettings);
+    ui.btnHudSettings.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // Mouse wheel zoom during gameplay
+  window.addEventListener('wheel', (e) => {
+    if (game.phase !== 'playing' || settingsOpen) return;
+    adjustZoom(e.deltaY < 0 ? 0.08 : -0.08);
+  }, { passive: true });
+
+  // Mobile / iPad touchscreen pinch-to-zoom
+  controls.onPinchZoom = (delta) => adjustZoom(delta);
+
+  // Keyboard navigation: Escape toggles settings or closes hangar; +/- zooms during play; O toggles settings
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (game.hangarOpen) {
+        closeHangar();
+      } else if (settingsOpen) {
+        closeSettings();
+      } else {
+        openSettings();
+      }
+      return;
+    }
+    if ((e.key === 'o' || e.key === 'O') && !settingsOpen && !game.hangarOpen) {
+      e.preventDefault();
+      openSettings();
+      return;
+    }
+    if (game.phase === 'playing' && !settingsOpen) {
+      if (e.key === '-' || e.key === '_' || e.key === '[') {
+        e.preventDefault();
+        adjustZoom(-0.1);
+      } else if (e.key === '+' || e.key === '=' || e.key === ']') {
+        e.preventDefault();
+        adjustZoom(0.1);
+      }
+    }
   });
 }
 
@@ -1513,6 +1757,7 @@ function wireHangar() {
 function enterLobby() {
   game.phase = 'lobby';
   controls.setEnabled(false);
+  if (settingsOpen) closeSettings();
   ui.hud.classList.add('hidden');
   ui.touch.classList.add('hidden');
   ui.results.classList.add('hidden');
@@ -1637,6 +1882,9 @@ function updateRaceGateHighlight() {
 function startRound(data) {
   sound.resume();
   if (game.hangarOpen) closeHangar();
+  if (settingsOpen) closeSettings();
+  targetCameraZoom = gameSettings.zoom;
+  currentCameraZoom = gameSettings.zoom;
   const sponsor = data.roundSponsor || data.activeRoundSponsor || null;
   game.activeRoundSponsor = sponsor;
   game.phase = 'playing';
@@ -2683,7 +2931,7 @@ function stepLocalFlight(dt) {
   const t = nowS();
   controls.poll();
   const joyX = controls.joyX;
-  const joyY = controls.joyY;
+  const joyY = controls.joyY * (gameSettings.invertPitch ? -1 : 1);
   let boost = controls.boost;
   const rollTime = BARREL_ROLL_TIME * game.perk.rollTime;
   if (controls.takeRollTap() && t >= me.rollingUntil) {
@@ -2799,14 +3047,17 @@ function stepLocalFlight(dt) {
     }
   }
 
-  // Camera: chase behind, ignoring roll so the horizon stays readable
+  // Camera: chase behind, smoothly scaled by zoom factor
+  currentCameraZoom = lerp(currentCameraZoom, targetCameraZoom, Math.min(1, dt * 8));
+  const zMult = 1 / Math.max(0.4, currentCameraZoom);
   quatFromYPR(tmpQ, me.yaw, me.pitch * 0.55, 0);
-  tmpV2.set(0, 5, 17 + (me.speed - SPEED_BASE) * 0.06).applyQuaternion(tmpQ).add(me.pos);
+  tmpV2.set(0, 5 * zMult, (17 + (me.speed - SPEED_BASE) * 0.06) * zMult).applyQuaternion(tmpQ).add(me.pos);
   if (tmpV2.y < WATER_LEVEL + 2.5) tmpV2.y = WATER_LEVEL + 2.5;
   gfx.camera.position.lerp(tmpV2, 1 - Math.exp(-dt * 7));
-  tmpV3.copy(me.pos).addScaledVector(tmpV, 26).add(tmpV2.set(0, 2.5, 0));
+  tmpV3.copy(me.pos).addScaledVector(tmpV, 26 * zMult).add(tmpV2.set(0, 2.5 * zMult, 0));
   gfx.camera.lookAt(tmpV3);
-  gfx.targetFov = sup ? 76 : boost ? 74 : 60;
+  const baseFov = sup ? 76 : boost ? 74 : 60;
+  gfx.targetFov = baseFov / Math.sqrt(currentCameraZoom);
   gfx.followShadow(me.pos);
 
   // Engine audio
@@ -3381,6 +3632,7 @@ async function boot() {
   wireLobby();
   wireEmotes();
   wireHangar();
+  wireSettings();
   const info = await loadHostInfo();
   loadLeaderboard();
   if (gfx) {
@@ -3392,7 +3644,12 @@ async function boot() {
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
   window.addEventListener('pointerdown', () => sound.resume(), { passive: true });
-  window.__sunset = { game, me, remote, rockets, balloons, pickups, mines, decoys, get gfx() { return gfx; }, controls, PILOTS, POWERUPS, get world() { return world; }, get socket() { return socket; } };
+  window.__sunset = {
+    game, me, remote, rockets, balloons, pickups, mines, decoys,
+    get gfx() { return gfx; }, controls, PILOTS, POWERUPS,
+    get world() { return world; }, get socket() { return socket; },
+    gameSettings, adjustZoom, openSettings, closeSettings,
+  };
 }
 
 boot();

@@ -1253,8 +1253,26 @@
       - Dragon wing flapping: 6.0 -> 7.5 (P1) / 9.5 -> 11.875 (P2); spinal chain serpentine undulation: 3.8 -> 4.75 (P1) / 5.5 -> 6.875 (P2).
   - **Automated Tests:** Added dedicated test suite in `test/boss.test.js` validating the 25% speed increase across all bosses in Phase 1 and Phase 2. All 93 unit and integration tests passing (100%).
 
+- **Control Sensitivity Configuration & In-Game Camera Zoom (`public/js/controls.js`, `public/js/main.js`, `public/index.html`, `public/style.css`, `test/settings.test.js`):**
+  - **Comprehensive Flight Settings Modal (`#settings-modal`):**
+    * Accessible from both the Lobby top bar (`⚙️ SETTINGS` button next to Hangar Shop) and directly during Gameplay via HUD button (`⚙️`) or keyboard shortcut (`Esc` or `O`).
+    * **Control Sensitivity:** Adjustable range slider from 40% to 200% (default 100%) with live value display badge and one-tap quick presets: `Low 50%`, `Normal 100%`, `High 150%`, and `Ultra 200%`.
+    * **In-Game Camera Zoom:** Range slider from 60% (Wide) to 160% (Close), default 100%, with presets: `Wide (70%)`, `Normal (100%)`, `Close (135%)`.
+    * **Pitch Inversion (Y-Axis):** Toggle buttons between `Standard (Dive Down)` and `Inverted (Flight Yoke)`.
+    * **Reset to Defaults:** `↺ Reset to Defaults` button restoring 100% sensitivity, 100% zoom, and standard pitch.
+    * **Persistence:** Seamlessly persists settings in `localStorage` under `ss_settings`.
+  - **Real-Time In-Game Camera Zooming:**
+    * **Mouse Scroll Wheel:** Smoothly zoom in (scroll up) and zoom out (scroll down) during gameplay rounds with inertia damping.
+    * **Keyboard Shortcuts:** `-` / `_` / `[` to zoom out; `+` / `=` / `]` to zoom in.
+    * **On-Screen HUD Stepper:** Interactive `[−]` and `[+]` zoom buttons with live percentage display badge (`🔍 100%`) positioned on the flight HUD.
+    * **Touchscreen Pinch-to-Zoom:** Full two-finger pinch tracking on mobile and iPad touchscreens. Spreading fingers zooms in; pinching together zooms out.
+    * **Camera Kinematics:** Smooth exponential lerping between current zoom and target zoom. Preserves exact 100% camera offset baseline while dynamically scaling chase distance, elevation, target look-ahead, and speed warp FOV for both cinematic close-up dogfights and wide tactical overviews.
+  - **Sensitivity Input Scaling:**
+    * Scales touch joystick deflection, desktop WASD/Arrow steering, and mouse drag steering cleanly through `Controls.setSensitivity()` without disrupting physics damping or collision boundaries.
+  - **Automated Tests:** Added `test/settings.test.js` covering default sensitivity, range clamping, keyboard and touch virtual stick scaling, two-finger pinch-to-zoom event triggering, camera distance and FOV mathematics, pitch inversion, and bounds checking. All 100 unit and integration tests passing (100%).
+
 ### Pending / Next Up
-- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 accelerated Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers.
+- All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 accelerated Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers with customizable control sensitivity, interactive in-game zoom, and flight settings.
 - Optional future enhancements:
   * Additional party sponsor modifiers or extra weapon loadouts.
   * Optional reverse proxy or custom domain via Caddy if external HTTPS domain mapping is desired.
