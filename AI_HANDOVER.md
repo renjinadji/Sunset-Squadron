@@ -1271,6 +1271,26 @@
     * Scales touch joystick deflection, desktop WASD/Arrow steering, and mouse drag steering cleanly through `Controls.setSensitivity()` without disrupting physics damping or collision boundaries.
   - **Automated Tests:** Added `test/settings.test.js` covering default sensitivity, range clamping, keyboard and touch virtual stick scaling, two-finger pinch-to-zoom event triggering, camera distance and FOV mathematics, pitch inversion, and bounds checking. All 100 unit and integration tests passing (100%).
 
+- **Boss Flight Speed Synchronized to Jets/Wingmen/Player Speed (`shared/bosses.js`, `server.js`, `public/js/entities.js`, `test/boss.test.js`):**
+  - **Full Speed Synchronization Across all 4 Boss Encounters:**
+    * Previously, bosses flew at 18.75 - 27.5 m/s in Phase 1, making them less than half the speed of the 48 kn player and wingmen jets.
+    * Now, all bosses match the base cruising flight speed of the jets/wingmen/player (`SPEED_BASE = 48`) in Phase 1:
+      - **Sky Dreadnought (`dreadnought`):** Phase 1 cruise set to 48 m/s (matching jets); Phase 2 Overdrive accelerated to 75 m/s.
+      - **The Mega Zeppelin (`zeppelin`):** Phase 1 cruise set to 48 m/s (matching jets); Phase 2 Overdrive accelerated to 72 m/s.
+      - **Giant UFO (`ufo`):** Phase 1 cruise set to 48 m/s (matching jets); Phase 2 Overdrive accelerated to 80 m/s.
+      - **The Sky Dragon (`dragon`):** Phase 1 cruise set to 48 m/s (matching jets); Phase 2 Overdrive accelerated to 76 m/s.
+  - **Overdrive Phase 2 Acceleration & Boost Regime:**
+    * In Phase 2 Overdrive (triggered at <= 50% HP), the bosses accelerate to 72 - 80 m/s. Non-boosting jets (cruising at 48) get outrun, requiring pilots and wingmen to engage their afterburner boost (`SPEED_BOOST = 85`) to close the gap and execute high-speed intercepts.
+  - **Authoritative Server Orbit & AI Intercept Sync (`server.js`):**
+    * Harmonized vertical wave phase `altitudePhase` progression with the faster orbital velocity (`(boss.orbitSpeed / boss.orbitRadius) * 3.0 * dt`) so the boss's 3D sinusoidal path dips and climbs in majestic terrain harmony.
+    * Bot wingmen dynamically compute target lead velocity (`vscale(boss.dir, boss.orbitSpeed)`), accurately leading rockets into the high-speed boss trajectory.
+  - **Synchronized Visual Kinematics (`public/js/entities.js`):**
+    * Dreadnought turbine rotor spin speed increased to 48 rad/s (P1) and 75 rad/s (P2).
+    * Zeppelin brass propeller spin speed increased to 48 rad/s (P1) and 72 rad/s (P2).
+    * UFO counter-rotating anti-gravity rings accelerated to 7.0 / 8.7 rad/s (P1) and 11.6 / 14.5 rad/s (P2).
+    * Dragon wing flapping accelerated to 12.0 (P1) and 18.0 (P2); serpentine spinal undulation accelerated to 7.5 (P1) and 11.0 (P2).
+  - **Automated Tests:** Updated `test/boss.test.js` validating that all bosses match the jet cruising speed (`SPEED_BASE = 48`) in Phase 1 and accelerate into Overdrive in Phase 2. All 100 unit and integration tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 accelerated Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers with customizable control sensitivity, interactive in-game zoom, and flight settings.
 - Optional future enhancements:

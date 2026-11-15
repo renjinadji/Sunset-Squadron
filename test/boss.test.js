@@ -61,14 +61,14 @@ test('boss damage and phase transition logic (Overdrive Phase 2 at 50% HP)', () 
   let hp = maxHp;
   let phase = 1;
   let enraged = false;
-  let speed = 22.5;
+  let speed = 48;
 
   function applyDamage(amount) {
     hp = Math.max(0, hp - amount);
     if (phase === 1 && hp <= Math.round(maxHp * 0.5)) {
       phase = 2;
       enraged = true;
-      speed = 35;
+      speed = 75;
     }
   }
 
@@ -77,14 +77,14 @@ test('boss damage and phase transition logic (Overdrive Phase 2 at 50% HP)', () 
   assert.strictEqual(hp, 650);
   assert.strictEqual(phase, 1);
   assert.strictEqual(enraged, false);
-  assert.strictEqual(speed, 22.5);
+  assert.strictEqual(speed, 48);
 
   // Cross 50% threshold (400 HP)
   applyDamage(260);
   assert.strictEqual(hp, 390);
   assert.strictEqual(phase, 2, 'Transitions to Phase 2 at <= 50% HP');
   assert.strictEqual(enraged, true);
-  assert.strictEqual(speed, 35, 'Speed accelerates to 35 m/s in Overdrive');
+  assert.strictEqual(speed, 75, 'Speed accelerates to 75 m/s in Overdrive');
 });
 
 test('boss Sonic Frontiers attack specifications and bullet physics', () => {
@@ -477,17 +477,20 @@ test('multi-boss Phase 2 Overdrive transitions and accelerated flight speeds', (
   }
 });
 
-test('all bosses have 25% increased movement speed in both Phase 1 and Phase 2', () => {
+test('all bosses match the speed of the jets/wingmen/player in Phase 1 (48 m/s) and accelerate in Phase 2', () => {
+  const SPEED_BASE = 48;
   const expectedSpeeds = {
-    dreadnought: { p1: 22.5, p2: 35 },
-    zeppelin: { p1: 18.75, p2: 30 },
-    ufo: { p1: 27.5, p2: 42.5 },
-    dragon: { p1: 25, p2: 37.5 },
+    dreadnought: { p1: 48, p2: 75 },
+    zeppelin: { p1: 48, p2: 72 },
+    ufo: { p1: 48, p2: 80 },
+    dragon: { p1: 48, p2: 76 },
   };
 
   for (const [id, speeds] of Object.entries(expectedSpeeds)) {
     const boss = BOSS_DATA.bossById(id);
-    assert.strictEqual(boss.speedP1, speeds.p1, `${id} Phase 1 speed must be ${speeds.p1} m/s (+25%)`);
-    assert.strictEqual(boss.speedP2, speeds.p2, `${id} Phase 2 speed must be ${speeds.p2} m/s (+25%)`);
+    assert.strictEqual(boss.speedP1, SPEED_BASE, `${id} Phase 1 speed must match jet cruise speed (${SPEED_BASE} m/s)`);
+    assert.strictEqual(boss.speedP1, speeds.p1, `${id} Phase 1 speed must be ${speeds.p1} m/s`);
+    assert.strictEqual(boss.speedP2, speeds.p2, `${id} Phase 2 speed must be ${speeds.p2} m/s`);
+    assert.ok(boss.speedP2 > boss.speedP1, `${id} Phase 2 speed accelerates above Phase 1`);
   }
 });
