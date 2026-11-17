@@ -199,7 +199,7 @@ test('Controls sensitivity scales touch virtual stick inputs', () => {
   assert.equal(ctrl.joyY, 0);
 });
 
-test('Controls two-finger pinch-to-zoom invokes onPinchZoom callback', () => {
+test('Controls multi-touch: two-finger touch gestures do NOT trigger zoom (finger zoom disabled)', () => {
   setupMockEnv();
   const layer = createMockElement();
   const joyBase = createMockElement();
@@ -210,10 +210,7 @@ test('Controls two-finger pinch-to-zoom invokes onPinchZoom callback', () => {
   const ctrl = new Controls(layer, joyBase, joyKnob, boostBtn, fireBtn);
   ctrl.setEnabled(true);
 
-  let pinchDeltas = [];
-  ctrl.onPinchZoom = (delta) => pinchDeltas.push(delta);
-
-  // Initial 2-finger touch: distance = 100px
+  // Initial 2-finger touch (e.g. thumb on stick, other thumb on boost/fire)
   layer.dispatchEvent({
     type: 'touchstart',
     preventDefault() {},
@@ -227,40 +224,24 @@ test('Controls two-finger pinch-to-zoom invokes onPinchZoom callback', () => {
     ],
   });
 
-  // Move fingers apart: distance = 160px (+60px spread -> zoom in)
+  // Moving fingers apart or together does not trigger zoom; pinch zoom properties are disabled
+  assert.equal(ctrl.onPinchZoom, undefined, 'onPinchZoom is removed to prevent finger zoom');
+  assert.equal(ctrl._lastPinchDist, undefined, '_lastPinchDist tracking is removed');
+
   layer.dispatchEvent({
     type: 'touchmove',
     preventDefault() {},
     changedTouches: [
-      { identifier: 1, clientX: 70, clientY: 200 },
-      { identifier: 2, clientX: 230, clientY: 200 },
+      { identifier: 1, clientX: 50, clientY: 200 },
+      { identifier: 2, clientX: 250, clientY: 200 },
     ],
     touches: [
-      { identifier: 1, clientX: 70, clientY: 200 },
-      { identifier: 2, clientX: 230, clientY: 200 },
+      { identifier: 1, clientX: 50, clientY: 200 },
+      { identifier: 2, clientX: 250, clientY: 200 },
     ],
   });
 
-  assert.ok(pinchDeltas.length > 0, 'Pinch spread must trigger onPinchZoom');
-  assert.ok(pinchDeltas[0] > 0, 'Pinch spread delta must be positive (zoom in)');
-
-  // Move fingers closer: distance = 90px (-70px pinch -> zoom out)
-  pinchDeltas = [];
-  layer.dispatchEvent({
-    type: 'touchmove',
-    preventDefault() {},
-    changedTouches: [
-      { identifier: 1, clientX: 110, clientY: 200 },
-      { identifier: 2, clientX: 190, clientY: 200 },
-    ],
-    touches: [
-      { identifier: 1, clientX: 110, clientY: 200 },
-      { identifier: 2, clientX: 190, clientY: 200 },
-    ],
-  });
-
-  assert.ok(pinchDeltas.length > 0, 'Pinch squeeze must trigger onPinchZoom');
-  assert.ok(pinchDeltas[0] < 0, 'Pinch squeeze delta must be negative (zoom out)');
+  assert.equal(ctrl.enabled, true);
 });
 
 test('Camera zoom adjustments clamp strictly between 60% and 160%', () => {

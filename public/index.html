@@ -205,7 +205,7 @@
             </div>
             <button id="btn-start" class="big-btn green hidden">START ROUND</button>
             <div id="host-wait" class="hint">Waiting for the host to start the round…</div>
-            <div class="hint keys">Desktop: WASD / arrows steer · Shift boost · Space fire · Scroll / - + Zoom · Esc Settings</div>
+            <div class="hint keys">Desktop: WASD / arrows steer · Shift boost · Space fire · Esc Settings</div>
           </div>
         </section>
       </div>
@@ -220,7 +220,7 @@
       <div class="glass hud-pill" id="hud-crown">👑 —</div>
       <div class="glass hud-pill" id="hud-weather">☀️ CLEAR</div>
       <div class="glass hud-pill event-pill hidden" id="hud-event"><span id="hud-event-text"></span><span class="event-hp hidden" id="hud-event-hp"><span id="hud-event-hp-fill"></span></span></div>
-      <div class="glass hud-pill hud-zoom-pill" id="hud-zoom-pill" title="Camera Zoom (Scroll / - / +)">
+      <div class="glass hud-pill hud-zoom-pill" id="hud-zoom-pill" title="Camera Zoom">
         <button id="btn-zoom-out" class="hud-zoom-btn" type="button" aria-label="Zoom Out" title="Zoom Out (−)">−</button>
         <span id="hud-zoom-val" class="hud-zoom-val">100%</span>
         <button id="btn-zoom-in" class="hud-zoom-btn" type="button" aria-label="Zoom In" title="Zoom In (+)">+</button>
@@ -287,7 +287,6 @@
       <span class="ctrl-chip"><kbd>Space</kbd> / <kbd>L-Click</kbd> Fire</span>
       <span class="ctrl-chip"><kbd>Q</kbd> / <kbd>E</kbd> Barrel Roll</span>
       <span class="ctrl-chip"><kbd>Click Pilot</kbd> Radar Lock</span>
-      <span class="ctrl-chip"><kbd>Scroll</kbd> / <kbd>−</kbd><kbd>+</kbd> Zoom</span>
       <span class="ctrl-chip"><kbd>Esc</kbd> Settings</span>
       <span class="ctrl-chip"><kbd>1-5</kbd> Emote</span>
     </div>
@@ -444,7 +443,7 @@
             </div>
             <span id="setting-zoom-val" class="settings-val-badge">100%</span>
           </div>
-          <p class="settings-desc">Adjusts third-person chase distance and field of view. Can also be zoomed dynamically in-game with mouse scroll wheel, − / + keys, or on-screen HUD buttons.</p>
+          <p class="settings-desc">Adjusts third-person chase distance and field of view. Can also be zoomed dynamically in-game using the on-screen HUD [−] and [+] buttons.</p>
           <div class="settings-slider-row">
             <span class="slider-bound">Wide (60%)</span>
             <input type="range" id="input-zoom" min="60" max="160" step="5" value="100" class="settings-slider" />

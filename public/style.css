@@ -264,20 +264,20 @@ html, body {
 .hud-zoom-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 4px 10px;
   pointer-events: auto;
   user-select: none;
   border-color: rgba(255, 213, 74, 0.45);
 }
 .hud-zoom-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 900;
   line-height: 1;
   display: flex;
@@ -285,6 +285,7 @@ html, body {
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  touch-action: manipulation;
   transition: background 0.1s, transform 0.08s, border-color 0.1s;
 }
 .hud-zoom-btn:hover {

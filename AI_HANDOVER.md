@@ -1291,6 +1291,23 @@
     * Dragon wing flapping accelerated to 12.0 (P1) and 18.0 (P2); serpentine spinal undulation accelerated to 7.5 (P1) and 11.0 (P2).
   - **Automated Tests:** Updated `test/boss.test.js` validating that all bosses match the jet cruising speed (`SPEED_BASE = 48`) in Phase 1 and accelerate into Overdrive in Phase 2. All 100 unit and integration tests passing (100%).
 
+- **Disable Finger & Trackpad Zooming (Exclusive UI & Settings Zoom Controls)** (`public/js/controls.js`, `public/js/main.js`, `public/index.html`, `public/style.css`, `test/settings.test.js`):
+  - **Removed Multi-Touch Pinch-to-Zoom:**
+    * Completely removed `onPinchZoom` and `_lastPinchDist` tracking from `Controls` (`public/js/controls.js`).
+    * Two-finger touch events (`e.touches.length === 2`, which occur during simultaneous two-thumb flight steering and button tapping on mobile/iPad) no longer calculate distance deltas or trigger zoom changes.
+  - **Removed Trackpad Two-Finger Scroll & Mouse Wheel Zoom:**
+    * Removed window `wheel` event listener in `public/js/main.js`, preventing trackpad two-finger scrolling or mouse wheel accidental zoom triggers during flight.
+  - **Removed Keyboard Zoom Shortcuts:**
+    * Removed `-`, `+`, `[`, and `]` key shortcuts from gameplay `keydown` handler, guaranteeing that zoom adjustments are strictly initiated via UI controls.
+  - **Exclusive Zoom Mechanisms Preserved:**
+    * **Flight HUD Zoom Stepper:** Interactive on-screen `[−]` and `[+]` buttons with live percentage indicator (`🔍 100%`) positioned on the flight HUD, enlarged to 28x28px with `touch-action: manipulation` for responsive, effortless taps on both mobile touchscreens and desktop mice.
+    * **Settings Dialog Controls:** Zoom slider (60% - 160%) and quick presets (`Wide 70%`, `Normal 100%`, `Close 135%`) in `#settings-modal`.
+  - **Updated UI Copy & Hints:**
+    * Cleaned desktop control bar and lobby hints in `public/index.html` to reflect that zooming is controlled through the on-screen HUD buttons and settings dialog.
+  - **Automated Tests:**
+    * Updated `test/settings.test.js` to verify that multi-touch gestures do not trigger zoom (`ctrl.onPinchZoom` is undefined, `_lastPinchDist` removed).
+    * All 100 unit & integration tests passing (100%).
+
 ### Pending / Next Up
 - All core game modes (Crown Chase, Arch & Balloon Blitz, Checkpoint Race, Red vs Blue Team Dogfight with 1v1/2v2 sizing, and 4 accelerated Boss Raid titan encounters) across 4 procedural maps are fully operational on mobile, iPad, laptop, and desktop computers with customizable control sensitivity, interactive in-game zoom, and flight settings.
 - Optional future enhancements:

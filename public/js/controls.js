@@ -23,8 +23,6 @@ export class Controls {
 
     // Control sensitivity multiplier (defaults to 1.0, scaled via settings)
     this.sensitivity = 1.0;
-    this.onPinchZoom = null; // optional (delta) => void for two-finger touch zoom
-    this._lastPinchDist = null;
 
     // One-shot events, consumed via takeRollTap()
     this._rollTaps = 0;
@@ -127,12 +125,6 @@ export class Controls {
   _onTouchStart(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    if (e.touches && e.touches.length === 2) {
-      this._lastPinchDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-    }
     for (const t of Array.from(e.changedTouches)) {
       if (this._isDirectButtonHit(t.clientX, t.clientY)) {
         const kind = this._hitButton(t.clientX, t.clientY);
@@ -163,17 +155,6 @@ export class Controls {
   _onTouchMove(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    if (e.touches && e.touches.length === 2 && this._lastPinchDist !== null) {
-      const d = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      const diff = d - this._lastPinchDist;
-      if (Math.abs(diff) > 6) {
-        if (this.onPinchZoom) this.onPinchZoom(diff > 0 ? 0.05 : -0.05);
-        this._lastPinchDist = d;
-      }
-    }
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier === this.joyTouchId) {
         let dx = t.clientX - this.joyOrigin.x;
@@ -190,9 +171,6 @@ export class Controls {
   _onTouchEnd(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    if (!e.touches || e.touches.length < 2) {
-      this._lastPinchDist = null;
-    }
     for (const t of Array.from(e.changedTouches)) {
       if (t.identifier === this.joyTouchId) {
         this.joyTouchId = null;

@@ -1711,16 +1711,7 @@ function wireSettings() {
     ui.btnHudSettings.addEventListener('click', (e) => e.stopPropagation());
   }
 
-  // Mouse wheel zoom during gameplay
-  window.addEventListener('wheel', (e) => {
-    if (game.phase !== 'playing' || settingsOpen) return;
-    adjustZoom(e.deltaY < 0 ? 0.08 : -0.08);
-  }, { passive: true });
-
-  // Mobile / iPad touchscreen pinch-to-zoom
-  controls.onPinchZoom = (delta) => adjustZoom(delta);
-
-  // Keyboard navigation: Escape toggles settings or closes hangar; +/- zooms during play; O toggles settings
+  // Keyboard navigation: Escape toggles settings or closes hangar; O toggles settings
   window.addEventListener('keydown', (e) => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
     if (e.key === 'Escape') {
@@ -1738,15 +1729,6 @@ function wireSettings() {
       e.preventDefault();
       openSettings();
       return;
-    }
-    if (game.phase === 'playing' && !settingsOpen) {
-      if (e.key === '-' || e.key === '_' || e.key === '[') {
-        e.preventDefault();
-        adjustZoom(-0.1);
-      } else if (e.key === '+' || e.key === '=' || e.key === ']') {
-        e.preventDefault();
-        adjustZoom(0.1);
-      }
     }
   });
 }
